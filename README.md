@@ -123,9 +123,12 @@ pip install -r requirements.txt
 streamlit run main.py
 ```
 ---
-###
--Expand ingestion from 2 URLs → PDFs + bulk URLs + scheduled refresh
--Add a user/auth layer → then RBAC feels necessary and meaningful
--Add guardrails (NeMo Guardrails or custom) → prevent hallucinated financial data
--Wire up Ragas → track faithfulness and context recall on your finance test set
--Deploy on AWS/GCP with LangSmith tracing → query latency, cost per call, retrieval quality
+# Future Enhancements
+
+-  Expand ingestion from 2 URLs → PDFs + bulk URLs + scheduled refresh  
+-  Add a user/auth layer → then RBAC feels necessary and meaningful    
+-  Add guardrails (NeMo Guardrails or custom) → prevent hallucinated financial data    
+-  Wire up Ragas → track faithfulness and context recall on your finance test set    
+-  Deploy on AWS/GCP with LangSmith tracing → query latency, cost per call, retrieval quality    
+
+---
