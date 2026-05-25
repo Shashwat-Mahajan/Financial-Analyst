@@ -1,14 +1,17 @@
 """
 rag.py — Phase 1 Upgraded Financial Analyst RAG System
-Changes from original:
-  - Step 1: PDF support via pdfplumber
-  - Step 2: Bulk URL input (.txt file or list) with async fetching via httpx
-  - Step 3: Supabase Storage (free S3 replacement) for raw doc backup
-  - Step 4: Scheduler-ready ingestion (called by GitHub Actions cron)
+Architecture:
+  - PDF + bulk URL ingestion
+  - Async URL fetching via httpx
+  - ChromaDB persisted to AWS S3
+  - Scheduled refresh via AWS Lambda + EventBridge
 """
 
 import asyncio
+import boto3
+import io
 import os
+import tarfile
 from pathlib import Path
 from uuid import uuid4
 
@@ -22,28 +25,94 @@ from langchain_groq import ChatGroq
 from langchain_huggingface.embeddings import HuggingFaceEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-
 load_dotenv()
 
 os.environ["USER_AGENT"] = "Mozilla/5.0"
 
 # ── Config ────────────────────────────────────────────────────────────────────
-CHUNK_SIZE       = 500
-CHUNK_OVERLAP    = 50
-COLLECTION_NAME  = "rag_collection"
-VECTORSTORE_DIR  = "/tmp/chroma_db"
-EMBEDDING_MODEL  = "BAAI/bge-small-en"
-SUPABASE_BUCKET  = "rag-raw-docs"          # create this bucket in Supabase dashboard
+CHUNK_SIZE      = 500
+CHUNK_OVERLAP   = 50
+COLLECTION_NAME = "rag_collection"
+EMBEDDING_MODEL = "BAAI/bge-small-en"
 
-# ── Globals (cached) ──────────────────────────────────────────────────────────
+S3_BUCKET       = os.getenv("S3_BUCKET", "your-rag-bucket")
+S3_RAW_PREFIX   = "raw/"
+S3_CHROMA_KEY   = "chroma/chroma_db.tar.gz"
+
+IS_LAMBDA       = bool(os.getenv("AWS_LAMBDA_FUNCTION_NAME"))
+VECTORSTORE_DIR = "/tmp/chroma_db" if IS_LAMBDA else str(Path(__file__).parent / "vectorstore")
+
+# ── Globals ───────────────────────────────────────────────────────────────────
 llm          = None
 vector_store = None
-supabase: Client = None
+s3_client    = None
+
+
+# ── S3 client ─────────────────────────────────────────────────────────────────
+def get_s3():
+    global s3_client
+    if s3_client is None:
+        s3_client = boto3.client(
+            "s3",
+            aws_access_key_id     = os.getenv("AWS_ACCESS_KEY_ID"),
+            aws_secret_access_key = os.getenv("AWS_SECRET_ACCESS_KEY"),
+            region_name           = os.getenv("AWS_REGION", "ap-south-1"),
+        )
+    return s3_client
+
+
+# ── ChromaDB S3 sync ──────────────────────────────────────────────────────────
+def upload_chroma_to_s3():
+    """Compresses local ChromaDB and uploads to S3 after every ingestion."""
+    try:
+        tar_buffer = io.BytesIO()
+        with tarfile.open(fileobj=tar_buffer, mode="w:gz") as tar:
+            tar.add(VECTORSTORE_DIR, arcname="chroma_db")
+        tar_buffer.seek(0)
+        get_s3().put_object(
+            Bucket=S3_BUCKET,
+            Key=S3_CHROMA_KEY,
+            Body=tar_buffer.read(),
+        )
+        print("[S3] ChromaDB uploaded.")
+    except Exception as e:
+        print(f"[S3] ChromaDB upload failed: {e}")
+
+
+def download_chroma_from_s3():
+    """Downloads ChromaDB from S3 to /tmp at Lambda startup."""
+    try:
+        response   = get_s3().get_object(Bucket=S3_BUCKET, Key=S3_CHROMA_KEY)
+        tar_buffer = io.BytesIO(response["Body"].read())
+        with tarfile.open(fileobj=tar_buffer, mode="r:gz") as tar:
+            tar.extractall("/tmp")
+        print("[S3] ChromaDB downloaded.")
+        return True
+    except Exception as e:
+        print(f"[S3] ChromaDB not found, starting fresh: {e}")
+        return False
+
+
+def backup_raw_to_s3(doc_id: str, text: str, metadata: dict):
+    """Backs up raw document text to S3."""
+    try:
+        content = f"SOURCE: {metadata.get('source', 'unknown')}\n\n{text}"
+        get_s3().put_object(
+            Bucket=S3_BUCKET,
+            Key=f"{S3_RAW_PREFIX}{doc_id}.txt",
+            Body=content.encode("utf-8"),
+            ContentType="text/plain",
+        )
+    except Exception as e:
+        print(f"[S3] Raw backup failed: {e}")
 
 
 # ── Init ──────────────────────────────────────────────────────────────────────
 def initialize_components():
-    global llm, vector_store, supabase
+    global llm, vector_store
+
+    if IS_LAMBDA:
+        download_chroma_from_s3()
 
     if llm is None:
         llm = ChatGroq(
@@ -62,46 +131,13 @@ def initialize_components():
         vector_store = Chroma(
             collection_name=COLLECTION_NAME,
             embedding_function=embeddings,
-            persist_directory=str(VECTORSTORE_DIR),
+            persist_directory=VECTORSTORE_DIR,
         )
 
-    # Supabase is optional — only init if credentials exist
-    if supabase is None:
-        url  = os.getenv("SUPABASE_URL")
-        key  = os.getenv("SUPABASE_KEY")
-        if url and key:
-            supabase = create_client(url, key)
 
-
-# ── STEP 3: Supabase storage (free S3 replacement) ────────────────────────────
-def backup_to_supabase(doc_id: str, text: str, metadata: dict) -> None:
-    """
-    Uploads raw text to Supabase Storage for durability.
-    If Supabase is not configured, silently skips — won't break the pipeline.
-    """
-    if supabase is None:
-        return
-    try:
-        path = f"raw/{doc_id}.txt"
-        content = f"SOURCE: {metadata.get('source', 'unknown')}\n\n{text}"
-        supabase.storage.from_(SUPABASE_BUCKET).upload(
-            path,
-            content.encode("utf-8"),
-            {"content-type": "text/plain", "upsert": "true"},
-        )
-    except Exception as e:
-        print(f"[Supabase backup skipped] {e}")
-
-
-# ── STEP 1: PDF loader ────────────────────────────────────────────────────────
+# ── PDF loader ────────────────────────────────────────────────────────────────
 def load_pdf(source: str) -> list[Document]:
-    """
-    Accepts a local file path OR a URL pointing to a PDF.
-    Returns a list of LangChain Documents, one per page.
-    """
     docs = []
-
-    # If it's a URL, download first
     if source.startswith("http"):
         response = httpx.get(source, follow_redirects=True, timeout=30)
         response.raise_for_status()
@@ -113,7 +149,7 @@ def load_pdf(source: str) -> list[Document]:
     with pdfplumber.open(source) as pdf:
         for i, page in enumerate(pdf.pages):
             text = page.extract_text() or ""
-            text = " ".join(text.split())           # normalise whitespace
+            text = " ".join(text.split())
             if text.strip():
                 docs.append(Document(
                     page_content=text,
@@ -122,9 +158,8 @@ def load_pdf(source: str) -> list[Document]:
     return docs
 
 
-# ── STEP 2: Async URL loader ──────────────────────────────────────────────────
-async def _fetch_one(client: httpx.AsyncClient, url: str) -> Document | None:
-    """Fetches a single URL and returns a cleaned Document."""
+# ── Async URL loader ──────────────────────────────────────────────────────────
+async def _fetch_one(client: httpx.AsyncClient, url: str):
     try:
         r = await client.get(url, follow_redirects=True, timeout=20)
         r.raise_for_status()
@@ -142,44 +177,22 @@ async def _fetch_one(client: httpx.AsyncClient, url: str) -> Document | None:
 
 
 async def _fetch_all_urls(urls: list[str]) -> list[Document]:
-    """
-    Fetches all URLs concurrently using httpx.AsyncClient.
-    20 URLs that used to take 40s sequentially now take ~5s.
-    """
     async with httpx.AsyncClient(
         headers={"User-Agent": "Mozilla/5.0"},
         limits=httpx.Limits(max_connections=10),
     ) as client:
-        tasks = [_fetch_one(client, url) for url in urls]
-        results = await asyncio.gather(*tasks)
+        results = await asyncio.gather(*[_fetch_one(client, url) for url in urls])
     return [doc for doc in results if doc is not None]
 
 
 def load_urls_async(urls: list[str]) -> list[Document]:
-    """Sync wrapper around the async URL fetcher — safe to call from Streamlit."""
     return asyncio.run(_fetch_all_urls(urls))
 
 
-# ── STEP 1: Unified source loader ────────────────────────────────────────────
-def load_source(source: str) -> list[Document]:
-    """
-    Accepts a single source — either a URL or a path/URL to a PDF.
-    Returns LangChain Documents with consistent metadata.
-    """
-    if source.lower().endswith(".pdf"):
-        return load_pdf(source)
-    else:
-        return load_urls_async([source])
-
-
+# ── Unified source loader ─────────────────────────────────────────────────────
 def load_sources(sources: list[str]) -> list[Document]:
-    """
-    Accepts a mixed list of URLs and PDF paths.
-    URLs are fetched concurrently; PDFs are loaded directly.
-    """
     urls = [s for s in sources if not s.lower().endswith(".pdf")]
     pdfs = [s for s in sources if s.lower().endswith(".pdf")]
-
     docs = []
     if urls:
         docs += load_urls_async(urls)
@@ -188,17 +201,7 @@ def load_sources(sources: list[str]) -> list[Document]:
     return docs
 
 
-# ── STEP 2: .txt bulk URL file reader ────────────────────────────────────────
 def load_urls_from_txt(filepath: str) -> list[str]:
-    """
-    Reads a .txt file where each line is a URL.
-    Skips blank lines and comment lines starting with #.
-
-    Example urls.txt:
-        https://finance.yahoo.com/...
-        https://reuters.com/...
-        # this line is ignored
-    """
     with open(filepath, "r") as f:
         lines = f.readlines()
     return [
@@ -208,7 +211,7 @@ def load_urls_from_txt(filepath: str) -> list[str]:
     ]
 
 
-# ── Text splitter (shared for both PDFs and URLs) ────────────────────────────
+# ── Splitter ──────────────────────────────────────────────────────────────────
 def split_documents(docs: list[Document]) -> list[Document]:
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=CHUNK_SIZE,
@@ -217,13 +220,8 @@ def split_documents(docs: list[Document]) -> list[Document]:
     return splitter.split_documents(docs)
 
 
-# ── Main ingestion pipeline ───────────────────────────────────────────────────
+# ── Ingestion pipeline ────────────────────────────────────────────────────────
 def process_sources(sources: list[str]):
-    """
-    Unified ingestion pipeline.
-    `sources` can be a mix of URLs and PDF paths/URLs.
-    Yields status strings for Streamlit to display.
-    """
     yield "🚀 Initialising components..."
     initialize_components()
 
@@ -234,90 +232,42 @@ def process_sources(sources: list[str]):
         yield "❌ No documents loaded. Check your URLs/PDFs."
         return
 
-    yield f"✂️ Splitting {len(docs)} documents..."
+    yield f"✂️  Splitting {len(docs)} documents..."
     chunks = split_documents(docs)
 
-    yield f"💾 Storing {len(chunks)} chunks in vector DB..."
+    yield f"💾 Storing {len(chunks)} chunks in ChromaDB..."
     ids = [str(uuid4()) for _ in chunks]
     vector_store.add_documents(chunks, ids=ids)
 
-    yield "☁️ Backing up raw docs to Supabase..."
+    yield "☁️  Backing up raw docs to S3..."
     for doc in docs:
-        doc_id = str(uuid4())
-        backup_to_supabase(doc_id, doc.page_content, doc.metadata)
+        backup_raw_to_s3(str(uuid4()), doc.page_content, doc.metadata)
+
+    yield "📤 Syncing ChromaDB to S3..."
+    upload_chroma_to_s3()
 
     yield f"✅ Done! {len(chunks)} chunks indexed from {len(docs)} documents."
 
 
-# ── Legacy wrapper (keeps old Streamlit UI working unchanged) ─────────────────
 def process_urls(urls: list[str]):
-    """Kept for backward compatibility with the existing Streamlit app."""
     yield from process_sources(urls)
 
 
-# ── STEP 4: Scheduler entry point (called by GitHub Actions cron) ─────────────
-def scheduled_refresh():
-    """
-    Called by GitHub Actions on a cron schedule (every 6 hours).
-    Reads URLs from urls.txt in the repo, ingests fresh content.
-
-    GitHub Actions workflow (.github/workflows/refresh.yml):
-    ─────────────────────────────────────────────────────────
-    name: Scheduled RAG Refresh
-    on:
-      schedule:
-        - cron: '0 */6 * * *'   # every 6 hours
-      workflow_dispatch:         # also allow manual trigger
-
-    jobs:
-      refresh:
-        runs-on: ubuntu-latest
-        steps:
-          - uses: actions/checkout@v4
-          - uses: actions/setup-python@v5
-            with:
-              python-version: '3.11'
-          - run: pip install -r requirements.txt
-          - run: python rag.py --refresh
-            env:
-              GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-              SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-              SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-    ─────────────────────────────────────────────────────────
-    Add GROQ_API_KEY, SUPABASE_URL, SUPABASE_KEY as GitHub repo secrets.
-    """
-    print("[Scheduler] Starting scheduled refresh...")
-    initialize_components()
-
-    urls_file = Path(__file__).parent / "urls.txt"
-    if not urls_file.exists():
-        print("[Scheduler] urls.txt not found. Create it with one URL per line.")
-        return
-
-    urls = load_urls_from_txt(str(urls_file))
-    print(f"[Scheduler] Found {len(urls)} URLs to refresh.")
-
-    for status in process_sources(urls):
-        print(f"[Scheduler] {status}")
-
-    print("[Scheduler] Refresh complete.")
-
-
-# ── Answer generation (unchanged from original) ───────────────────────────────
+# ── Answer generation ─────────────────────────────────────────────────────────
 def extract_companies_from_docs(docs):
     companies = set()
     for doc in docs:
         source = doc.metadata.get("source", "").lower()
-        if "apple" in source:    companies.add("Apple")
+        if "apple"     in source: companies.add("Apple")
         if "microsoft" in source: companies.add("Microsoft")
-        if "tesla" in source:    companies.add("Tesla")
-        if "google" in source or "alphabet" in source: companies.add("Google")
+        if "tesla"     in source: companies.add("Tesla")
+        if "google"    in source or "alphabet" in source: companies.add("Google")
     return list(companies)
 
 
 def generate_answer(query):
     if not vector_store:
-        raise RuntimeError("Vector DB not initialised. Call initialize_components() first.")
+        raise RuntimeError("Vector DB not initialised.")
 
     initial_results = vector_store.similarity_search(query, k=20)
     companies       = extract_companies_from_docs(initial_results)
@@ -331,8 +281,7 @@ def generate_answer(query):
     if not docs:
         return "I don't know", []
 
-    context = "\n\n".join([doc.page_content for doc in docs])
-
+    context  = "\n\n".join([doc.page_content for doc in docs])
     response = llm.invoke(f"""
 You are a financial analyst AI.
 
@@ -340,7 +289,7 @@ Rules:
 - Use ONLY the given context
 - Combine information from multiple sources
 - If multiple companies are present, compare them clearly
-- If answer not found → say "I don't know"
+- If answer not found say I don't know
 
 Format:
 - Use bullet points
@@ -358,16 +307,29 @@ Question:
     return response.content, sources
 
 
-# ── CLI entry point ───────────────────────────────────────────────────────────
-if __name__ == "__main__":
-    import sys
-    if "--refresh" in sys.argv:
-        scheduled_refresh()
-    else:
-        # Quick smoke test
-        initialize_components()
-        for status in process_sources(["https://example.com"]):
-            print(status)
-        answer, sources = generate_answer("What is the revenue?")
-        print("Answer:", answer)
-        print("Sources:", sources)
+# ── Lambda handler ────────────────────────────────────────────────────────────
+def lambda_handler(event, context):
+    """
+    AWS Lambda entry point — triggered by EventBridge every 6 hours.
+    Reads urls.txt from S3 bucket under config/urls.txt
+    """
+    print("[Lambda] Scheduled refresh started.")
+
+    try:
+        response = get_s3().get_object(Bucket=S3_BUCKET, Key="config/urls.txt")
+        content  = response["Body"].read().decode("utf-8")
+        urls     = [
+            line.strip()
+            for line in content.splitlines()
+            if line.strip() and not line.strip().startswith("#")
+        ]
+    except Exception as e:
+        print(f"[Lambda] Could not read config/urls.txt from S3: {e}")
+        return {"statusCode": 500, "body": "Failed to read urls.txt"}
+
+    print(f"[Lambda] Found {len(urls)} URLs.")
+
+    for status in process_sources(urls):
+        print(f"[Lambda] {status}")
+
+    return {"statusCode": 200, "body": f"Refreshed {len(urls)} sources."}

@@ -1,6 +1,7 @@
-# ── Existing dependencies ─────────────────────────────────────────────────────
+# ── Existing ──────────────────────────────────────────────────────────────────
 langchain
 langchain-community
+langchain-core
 langchain-chroma
 langchain-groq
 langchain-huggingface
@@ -11,6 +12,6 @@ python-dotenv
 beautifulsoup4
 
 # ── Phase 1 additions ─────────────────────────────────────────────────────────
-pdfplumber          # Step 1 — PDF parsing
-httpx               # Step 2 — async URL fetching
-supabase            # Step 3 — Supabase storage (free S3 replacement)
+pdfplumber
+httpx
+boto3
