@@ -333,3 +333,30 @@ def lambda_handler(event, context):
         print(f"[Lambda] {status}")
 
     return {"statusCode": 200, "body": f"Refreshed {len(urls)} sources."}
+
+if __name__ == "__main__":
+    import sys
+    if "--refresh" in sys.argv:
+        print("[Refresh] Starting scheduled refresh...")
+        initialize_components()
+
+        # Read urls.txt from S3
+        try:
+            response = get_s3().get_object(
+                Bucket=S3_BUCKET,
+                Key="config/urls.txt"
+            )
+            content = response["Body"].read().decode("utf-8")
+            urls = [
+                line.strip()
+                for line in content.splitlines()
+                if line.strip() and not line.strip().startswith("#")
+            ]
+        except Exception as e:
+            print(f"[Refresh] Could not read urls.txt from S3: {e}")
+            sys.exit(1)
+
+        for status in process_sources(urls):
+            print(status)
+
+        print("[Refresh] Done.")
