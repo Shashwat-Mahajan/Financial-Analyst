@@ -6,7 +6,9 @@ Architecture:
   - ChromaDB persisted to AWS S3
   - Scheduled refresh via AWS Lambda + EventBridge
 """
-
+__import__('pysqlite3')
+import sys
+sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
 import asyncio
 import boto3
 import io
@@ -24,6 +26,7 @@ from langchain_chroma import Chroma
 from langchain_groq import ChatGroq
 from langchain_huggingface.embeddings import HuggingFaceEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+
 
 load_dotenv()
 
@@ -48,15 +51,14 @@ vector_store = None
 s3_client    = None
 
 
-# ── S3 client ─────────────────────────────────────────────────────────────────
 def get_s3():
     global s3_client
     if s3_client is None:
+        # On Lambda, credentials are provided automatically by IAM role
+        # Locally, boto3 reads from .env via AWS_ACCESS_KEY_ID etc.
         s3_client = boto3.client(
             "s3",
-            aws_access_key_id     = os.getenv("AWS_ACCESS_KEY_ID"),
-            aws_secret_access_key = os.getenv("AWS_SECRET_ACCESS_KEY"),
-            region_name           = os.getenv("AWS_REGION", "ap-south-1"),
+            region_name=os.getenv("AWS_REGION", "ap-south-1"),
         )
     return s3_client
 
