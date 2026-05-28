@@ -316,7 +316,7 @@ def lambda_handler(event, context):
     print("[Lambda] Scheduled refresh started.")
 
     try:
-        response = get_s3().get_object(Bucket=S3_BUCKET, Key="config/urls.txt")
+        response = get_s3().get_object(Bucket=S3_BUCKET, Key="config/Financial news sources refreshed.txt")
         content  = response["Body"].read().decode("utf-8")
         urls     = [
             line.strip()
@@ -344,7 +344,7 @@ if __name__ == "__main__":
         try:
             response = get_s3().get_object(
                 Bucket=S3_BUCKET,
-                Key="config/urls.txt"
+                Key="config/Financial news sources refreshed.txt"
             )
             content = response["Body"].read().decode("utf-8")
             urls = [
