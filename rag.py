@@ -4,15 +4,14 @@ Architecture:
   - PDF + bulk URL ingestion
   - Async URL fetching via httpx
   - ChromaDB persisted to AWS S3
-  - Scheduled refresh via AWS Lambda + EventBridge
+  - Scheduled refresh via GitHub Actions cron
 """
-__import__('pysqlite3')
-import sys
-sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
+
 import asyncio
 import boto3
 import io
 import os
+import sys
 import tarfile
 from pathlib import Path
 from uuid import uuid4
@@ -27,7 +26,6 @@ from langchain_groq import ChatGroq
 from langchain_huggingface.embeddings import HuggingFaceEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-
 load_dotenv()
 
 os.environ["USER_AGENT"] = "Mozilla/5.0"
@@ -41,9 +39,7 @@ EMBEDDING_MODEL = "BAAI/bge-small-en"
 S3_BUCKET       = os.getenv("S3_BUCKET", "your-rag-bucket")
 S3_RAW_PREFIX   = "raw/"
 S3_CHROMA_KEY   = "chroma/chroma_db.tar.gz"
-
-IS_LAMBDA       = bool(os.getenv("AWS_LAMBDA_FUNCTION_NAME"))
-VECTORSTORE_DIR = "/tmp/chroma_db" if IS_LAMBDA else str(Path(__file__).parent / "vectorstore")
+VECTORSTORE_DIR = str(Path(__file__).parent / "vectorstore")
 
 # ── Globals ───────────────────────────────────────────────────────────────────
 llm          = None
@@ -51,21 +47,21 @@ vector_store = None
 s3_client    = None
 
 
+# ── S3 client ─────────────────────────────────────────────────────────────────
 def get_s3():
     global s3_client
     if s3_client is None:
-        # On Lambda, credentials are provided automatically by IAM role
-        # Locally, boto3 reads from .env via AWS_ACCESS_KEY_ID etc.
         s3_client = boto3.client(
             "s3",
-            region_name=os.getenv("AWS_REGION", "ap-south-1"),
+            aws_access_key_id     = os.getenv("AWS_ACCESS_KEY_ID"),
+            aws_secret_access_key = os.getenv("AWS_SECRET_ACCESS_KEY"),
+            region_name           = os.getenv("AWS_REGION", "ap-south-1"),
         )
     return s3_client
 
 
 # ── ChromaDB S3 sync ──────────────────────────────────────────────────────────
 def upload_chroma_to_s3():
-    """Compresses local ChromaDB and uploads to S3 after every ingestion."""
     try:
         tar_buffer = io.BytesIO()
         with tarfile.open(fileobj=tar_buffer, mode="w:gz") as tar:
@@ -82,12 +78,11 @@ def upload_chroma_to_s3():
 
 
 def download_chroma_from_s3():
-    """Downloads ChromaDB from S3 to /tmp at Lambda startup."""
     try:
         response   = get_s3().get_object(Bucket=S3_BUCKET, Key=S3_CHROMA_KEY)
         tar_buffer = io.BytesIO(response["Body"].read())
         with tarfile.open(fileobj=tar_buffer, mode="r:gz") as tar:
-            tar.extractall("/tmp")
+            tar.extractall(str(Path(__file__).parent))
         print("[S3] ChromaDB downloaded.")
         return True
     except Exception as e:
@@ -96,7 +91,6 @@ def download_chroma_from_s3():
 
 
 def backup_raw_to_s3(doc_id: str, text: str, metadata: dict):
-    """Backs up raw document text to S3."""
     try:
         content = f"SOURCE: {metadata.get('source', 'unknown')}\n\n{text}"
         get_s3().put_object(
@@ -113,8 +107,8 @@ def backup_raw_to_s3(doc_id: str, text: str, metadata: dict):
 def initialize_components():
     global llm, vector_store
 
-    if IS_LAMBDA:
-        download_chroma_from_s3()
+    # Download latest ChromaDB from S3 before initializing
+    download_chroma_from_s3()
 
     if llm is None:
         llm = ChatGroq(
@@ -309,40 +303,12 @@ Question:
     return response.content, sources
 
 
-# ── Lambda handler ────────────────────────────────────────────────────────────
-def lambda_handler(event, context):
-    """
-    AWS Lambda entry point — triggered by EventBridge every 6 hours.
-    Reads urls.txt from S3 bucket under config/urls.txt
-    """
-    print("[Lambda] Scheduled refresh started.")
-
-    try:
-        response = get_s3().get_object(Bucket=S3_BUCKET, Key="config/Financial news sources refreshed.txt")
-        content  = response["Body"].read().decode("utf-8")
-        urls     = [
-            line.strip()
-            for line in content.splitlines()
-            if line.strip() and not line.strip().startswith("#")
-        ]
-    except Exception as e:
-        print(f"[Lambda] Could not read config/urls.txt from S3: {e}")
-        return {"statusCode": 500, "body": "Failed to read urls.txt"}
-
-    print(f"[Lambda] Found {len(urls)} URLs.")
-
-    for status in process_sources(urls):
-        print(f"[Lambda] {status}")
-
-    return {"statusCode": 200, "body": f"Refreshed {len(urls)} sources."}
-
+# ── CLI entry point for GitHub Actions ───────────────────────────────────────
 if __name__ == "__main__":
-    import sys
     if "--refresh" in sys.argv:
         print("[Refresh] Starting scheduled refresh...")
         initialize_components()
 
-        # Read urls.txt from S3
         try:
             response = get_s3().get_object(
                 Bucket=S3_BUCKET,
@@ -355,9 +321,10 @@ if __name__ == "__main__":
                 if line.strip() and not line.strip().startswith("#")
             ]
         except Exception as e:
-            print(f"[Refresh] Could not read urls.txt from S3: {e}")
+            print(f"[Refresh] Could not read urls file from S3: {e}")
             sys.exit(1)
 
+        print(f"[Refresh] Found {len(urls)} URLs.")
         for status in process_sources(urls):
             print(status)
 
