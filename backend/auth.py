@@ -7,7 +7,7 @@ from typing import Optional
 
 from dotenv import load_dotenv
 from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 
@@ -21,8 +21,8 @@ SECRET_KEY      = os.getenv("JWT_SECRET_KEY", "change-this-in-production-min-32-
 ALGORITHM       = "HS256"
 TOKEN_EXPIRE_HR = 24
 
-pwd_context   = CryptContext(schemes=["bcrypt"], deprecated="auto")
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
+pwd_context  = CryptContext(schemes=["bcrypt"], deprecated="auto")
+http_bearer  = HTTPBearer()
 
 
 # ── Password ──────────────────────────────────────────────────────────────────
@@ -49,7 +49,10 @@ def decode_token(token: str) -> Optional[dict]:
 
 
 # ── Current user dependency ───────────────────────────────────────────────────
-def get_current_user(token: str = Depends(oauth2_scheme)) -> dict:
+def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(http_bearer)
+) -> dict:
+    token   = credentials.credentials
     payload = decode_token(token)
     if not payload:
         raise HTTPException(
