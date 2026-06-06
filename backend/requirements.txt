@@ -1,26 +1,24 @@
-# ── Existing ──────────────────────────────────────────────────────────────────
+# ── Existing RAG dependencies ─────────────────────────────────────────────────
 langchain
-langchain-community
 langchain-core
 langchain-chroma
 langchain-groq
 langchain-huggingface
 langchain-text-splitters
 chromadb
-streamlit
 python-dotenv
 beautifulsoup4
-
-# ── Phase 1 additions ─────────────────────────────────────────────────────────
 pdfplumber
 httpx
 boto3
+sentence-transformers
 
-# Phase 2 additions
+# ── Phase 2 additions ─────────────────────────────────────────────────────────
 fastapi
-uvicorn
+uvicorn[standard]
 python-jose[cryptography]
 passlib[bcrypt]
 supabase
 pydantic[email]
 python-multipart
+nest_asyncio

@@ -1,6 +1,7 @@
 """
-routes/rag.py — /rag/query, /rag/ingest, /rag/ingest-files, /rag/me, /rag/status
+routes/rag.py — with request timeout on ingest and status pagination
 """
+import asyncio
 import os
 import sys
 import tempfile
@@ -16,16 +17,20 @@ from rag import (
     process_sources,
     initialize_components,
     load_urls_from_txt,
-    vector_store,
+    sanitize_urls,
     VECTORSTORE_DIR,
+    S3_BUCKET,
+    S3_CHROMA_KEY,
 )
 
 router = APIRouter(prefix="/rag", tags=["RAG"])
 
+INGEST_TIMEOUT = 120   # 2 minutes max per ingest request
+
 
 @router.post("/query", response_model=QueryResponse)
 def query(body: QueryRequest, user: dict = Depends(get_current_user)):
-    """All logged-in users can query — viewer, analyst, admin."""
+    """All logged-in users can query."""
     if not body.question.strip():
         raise HTTPException(status_code=400, detail="Question cannot be empty")
     try:
@@ -37,28 +42,50 @@ def query(body: QueryRequest, user: dict = Depends(get_current_user)):
 
 
 @router.post("/ingest", response_model=IngestResponse)
-def ingest(body: IngestRequest, user: dict = Depends(require_analyst)):
-    """Analyst and admin only — ingest URLs."""
+async def ingest(body: IngestRequest, user: dict = Depends(require_analyst)):
+    """
+    Analyst and admin only.
+    Times out after 2 minutes to prevent hanging requests.
+    Unsafe URLs are silently blocked.
+    """
     if not body.urls:
         raise HTTPException(status_code=400, detail="No URLs provided")
-    try:
+
+    # Sanitize URLs
+    safe_urls, blocked = sanitize_urls(body.urls)
+    if not safe_urls:
+        raise HTTPException(
+            status_code=400,
+            detail=f"All {len(blocked)} URLs were blocked for security reasons"
+        )
+
+    def run_ingest():
         initialize_components()
-        results = list(process_sources(body.urls))
-        return IngestResponse(message=results[-1] if results else "Ingestion complete")
+        results = list(process_sources(safe_urls))
+        return results[-1] if results else "Ingestion complete"
+
+    try:
+        message = await asyncio.wait_for(
+            asyncio.to_thread(run_ingest),
+            timeout=INGEST_TIMEOUT
+        )
+        warning = f" ({len(blocked)} URLs blocked)" if blocked else ""
+        return IngestResponse(message=message + warning)
+    except asyncio.TimeoutError:
+        raise HTTPException(
+            status_code=408,
+            detail=f"Ingestion timed out after {INGEST_TIMEOUT}s. Try fewer URLs."
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/ingest-files", response_model=IngestResponse)
-def ingest_files(
+async def ingest_files(
     files: List[UploadFile] = File(...),
     user: dict = Depends(require_analyst)
 ):
-    """
-    Analyst and admin only — ingest PDF or TXT files.
-    PDF  → parsed page by page
-    TXT  → treated as bulk URL list (one URL per line)
-    """
+    """Analyst and admin only — PDF or TXT file upload."""
     if not files:
         raise HTTPException(status_code=400, detail="No files provided")
 
@@ -67,8 +94,6 @@ def ingest_files(
 
     for file in files:
         suffix = os.path.splitext(file.filename)[1].lower()
-
-        # Save to temp file
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
             tmp.write(file.file.read())
             tmp_path = tmp.name
@@ -76,9 +101,9 @@ def ingest_files(
         if suffix == ".pdf":
             sources.append(tmp_path)
         elif suffix == ".txt":
-            # Read URLs from txt file
             urls = load_urls_from_txt(tmp_path)
-            sources.extend(urls)
+            safe_urls, _ = sanitize_urls(urls)
+            sources.extend(safe_urls)
             os.unlink(tmp_path)
         else:
             os.unlink(tmp_path)
@@ -90,13 +115,20 @@ def ingest_files(
     if not sources:
         raise HTTPException(status_code=400, detail="No valid sources found in uploaded files")
 
+    def run_ingest():
+        return list(process_sources(sources))
+
     try:
-        results = list(process_sources(sources))
-        return IngestResponse(message=results[-1] if results else "Ingestion complete")
+        results = await asyncio.wait_for(
+            asyncio.to_thread(run_ingest),
+            timeout=INGEST_TIMEOUT
+        )
+        return IngestResponse(message=results[-1] if results else "Done")
+    except asyncio.TimeoutError:
+        raise HTTPException(status_code=408, detail="File ingestion timed out after 2 minutes")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     finally:
-        # Clean up temp PDF files
         for src in sources:
             if src.startswith(tempfile.gettempdir()) and src.endswith(".pdf"):
                 try:
@@ -108,29 +140,27 @@ def ingest_files(
 @router.get("/status")
 def get_status(user: dict = Depends(get_current_user)):
     """
-    Returns what data is currently indexed in the RAG system.
-    All roles can access — helps viewers know what they can ask about.
+    Returns what's indexed — companies, sources, suggested questions.
+    All roles can access. Paginated to max 1000 chunks for performance.
     """
     try:
         initialize_components()
         from chromadb import PersistentClient
 
-        # Get all documents from ChromaDB
         client     = PersistentClient(path=VECTORSTORE_DIR)
         collection = client.get_or_create_collection("rag_collection")
-        results    = collection.get(include=["metadatas"])
-        metadatas  = results.get("metadatas", [])
 
-        # Extract unique sources
+        # Paginated — max 1000 to prevent memory issues
+        results   = collection.get(include=["metadatas"], limit=1000)
+        metadatas = results.get("metadatas", [])
+
         sources = list(set([
             m.get("source", "Unknown")
             for m in metadatas
             if m.get("source")
         ]))
 
-        # Extract companies from source URLs
         companies = set()
-        keywords  = set()
         for source in sources:
             s = source.lower()
             if "apple"     in s: companies.add("Apple")
@@ -142,28 +172,23 @@ def get_status(user: dict = Depends(get_current_user)):
             if "nvidia"    in s: companies.add("NVIDIA")
             if "netflix"   in s: companies.add("Netflix")
 
-        # Suggested questions based on available data
         suggested = []
         if companies:
-            company_list = list(companies)
-            suggested.append(f"What is the latest revenue of {company_list[0]}?")
-            if len(company_list) >= 2:
-                suggested.append(f"Compare {company_list[0]} and {company_list[1]} performance")
-            suggested.append(f"What are the risks facing {company_list[0]}?")
+            cl = list(companies)
+            suggested.append(f"What is the latest revenue of {cl[0]}?")
+            if len(cl) >= 2:
+                suggested.append(f"Compare {cl[0]} and {cl[1]} performance")
+            suggested.append(f"What are the risks facing {cl[0]}?")
             suggested.append("Which company has the best growth outlook?")
             suggested.append("What are the key financial metrics across all companies?")
         else:
-            suggested = [
-                "Ask about any company in the ingested data",
-                "What are the latest market trends?",
-                "Summarize the financial news",
-            ]
+            suggested = ["No data ingested yet. Ask an analyst to add sources."]
 
         return {
             "total_chunks":        len(metadatas),
             "total_sources":       len(sources),
             "companies_detected":  sorted(list(companies)),
-            "sources":             sources[:20],   # show max 20
+            "sources":             sources[:20],
             "suggested_questions": suggested,
             "last_refreshed":      "Every 6 hours via GitHub Actions",
         }
@@ -174,14 +199,13 @@ def get_status(user: dict = Depends(get_current_user)):
             "total_sources":       0,
             "companies_detected":  [],
             "sources":             [],
-            "suggested_questions": ["No data ingested yet. Ask an analyst to add sources."],
+            "suggested_questions": ["No data ingested yet."],
             "last_refreshed":      "Never",
         }
 
 
 @router.get("/me")
 def get_me(user: dict = Depends(get_current_user)):
-    """Returns current logged-in user info."""
     return {
         "id":    str(user["id"]),
         "email": user["email"],
