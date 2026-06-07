@@ -1,5 +1,5 @@
 """
-routes/rag.py — with request timeout on ingest and status pagination
+routes/rag.py — with Phase 3 NeMo Guardrails integrated into /rag/query
 """
 import asyncio
 import os
@@ -19,39 +19,48 @@ from rag import (
     load_urls_from_txt,
     sanitize_urls,
     VECTORSTORE_DIR,
-    S3_BUCKET,
-    S3_CHROMA_KEY,
 )
+from guardrails import get_guardrails
 
 router = APIRouter(prefix="/rag", tags=["RAG"])
 
-INGEST_TIMEOUT = 120   # 2 minutes max per ingest request
+INGEST_TIMEOUT = 120
 
 
+# ── Query with guardrails ─────────────────────────────────────────────────────
 @router.post("/query", response_model=QueryResponse)
 def query(body: QueryRequest, user: dict = Depends(get_current_user)):
-    """All logged-in users can query."""
+    """
+    All logged-in users can query.
+    Phase 3: Input rail blocks off-topic queries.
+             Output rail flags potential hallucinations.
+    """
     if not body.question.strip():
         raise HTTPException(status_code=400, detail="Question cannot be empty")
+
     try:
         initialize_components()
-        answer, sources = generate_answer(body.question)
-        return QueryResponse(answer=answer, sources=sources)
+        guardrails = get_guardrails()
+
+        # Run through full guardrails pipeline
+        final_answer, sources, was_flagged = guardrails.process_query(
+            query=body.question,
+            generate_fn=generate_answer,
+        )
+
+        return QueryResponse(answer=final_answer, sources=sources)
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ── Ingest with timeout ───────────────────────────────────────────────────────
 @router.post("/ingest", response_model=IngestResponse)
 async def ingest(body: IngestRequest, user: dict = Depends(require_analyst)):
-    """
-    Analyst and admin only.
-    Times out after 2 minutes to prevent hanging requests.
-    Unsafe URLs are silently blocked.
-    """
+    """Analyst and admin only. Times out after 2 minutes."""
     if not body.urls:
         raise HTTPException(status_code=400, detail="No URLs provided")
 
-    # Sanitize URLs
     safe_urls, blocked = sanitize_urls(body.urls)
     if not safe_urls:
         raise HTTPException(
@@ -80,12 +89,13 @@ async def ingest(body: IngestRequest, user: dict = Depends(require_analyst)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ── Ingest files ──────────────────────────────────────────────────────────────
 @router.post("/ingest-files", response_model=IngestResponse)
 async def ingest_files(
     files: List[UploadFile] = File(...),
     user: dict = Depends(require_analyst)
 ):
-    """Analyst and admin only — PDF or TXT file upload."""
+    """Analyst and admin only — PDF or TXT upload."""
     if not files:
         raise HTTPException(status_code=400, detail="No files provided")
 
@@ -113,7 +123,7 @@ async def ingest_files(
             )
 
     if not sources:
-        raise HTTPException(status_code=400, detail="No valid sources found in uploaded files")
+        raise HTTPException(status_code=400, detail="No valid sources found")
 
     def run_ingest():
         return list(process_sources(sources))
@@ -125,7 +135,7 @@ async def ingest_files(
         )
         return IngestResponse(message=results[-1] if results else "Done")
     except asyncio.TimeoutError:
-        raise HTTPException(status_code=408, detail="File ingestion timed out after 2 minutes")
+        raise HTTPException(status_code=408, detail="File ingestion timed out")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     finally:
@@ -137,27 +147,22 @@ async def ingest_files(
                     pass
 
 
+# ── Status ────────────────────────────────────────────────────────────────────
 @router.get("/status")
 def get_status(user: dict = Depends(get_current_user)):
-    """
-    Returns what's indexed — companies, sources, suggested questions.
-    All roles can access. Paginated to max 1000 chunks for performance.
-    """
+    """Returns indexed data summary — all roles."""
     try:
         initialize_components()
         from chromadb import PersistentClient
 
         client     = PersistentClient(path=VECTORSTORE_DIR)
         collection = client.get_or_create_collection("rag_collection")
-
-        # Paginated — max 1000 to prevent memory issues
-        results   = collection.get(include=["metadatas"], limit=1000)
-        metadatas = results.get("metadatas", [])
+        results    = collection.get(include=["metadatas"], limit=1000)
+        metadatas  = results.get("metadatas", [])
 
         sources = list(set([
             m.get("source", "Unknown")
-            for m in metadatas
-            if m.get("source")
+            for m in metadatas if m.get("source")
         ]))
 
         companies = set()
@@ -180,7 +185,7 @@ def get_status(user: dict = Depends(get_current_user)):
                 suggested.append(f"Compare {cl[0]} and {cl[1]} performance")
             suggested.append(f"What are the risks facing {cl[0]}?")
             suggested.append("Which company has the best growth outlook?")
-            suggested.append("What are the key financial metrics across all companies?")
+            suggested.append("What are the key financial metrics?")
         else:
             suggested = ["No data ingested yet. Ask an analyst to add sources."]
 
@@ -191,9 +196,10 @@ def get_status(user: dict = Depends(get_current_user)):
             "sources":             sources[:20],
             "suggested_questions": suggested,
             "last_refreshed":      "Every 6 hours via GitHub Actions",
+            "guardrails_active":   True,
         }
 
-    except Exception as e:
+    except Exception:
         return {
             "total_chunks":        0,
             "total_sources":       0,
@@ -201,9 +207,11 @@ def get_status(user: dict = Depends(get_current_user)):
             "sources":             [],
             "suggested_questions": ["No data ingested yet."],
             "last_refreshed":      "Never",
+            "guardrails_active":   True,
         }
 
 
+# ── Me ────────────────────────────────────────────────────────────────────────
 @router.get("/me")
 def get_me(user: dict = Depends(get_current_user)):
     return {

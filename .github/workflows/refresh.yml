@@ -22,7 +22,7 @@ jobs:
           key: hf-bge-small-en-v1
 
       - name: Install dependencies
-        run: pip install langchain langchain-core langchain-chroma langchain-groq langchain-huggingface langchain-text-splitters chromadb pdfplumber httpx boto3 beautifulsoup4 python-dotenv sentence-transformers
+        run: pip install langchain langchain-core langchain-chroma langchain-groq langchain-huggingface langchain-text-splitters chromadb pdfplumber httpx boto3 beautifulsoup4 python-dotenv sentence-transformers nest_asyncio
 
       - name: Run refresh
         run: python backend/rag.py --refresh
