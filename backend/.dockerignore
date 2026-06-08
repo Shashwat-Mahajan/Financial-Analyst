@@ -1,0 +1,7 @@
+vectorstore/
+__pycache__/
+*.pyc
+*.pyo
+.env
+*.tar.gz
+.git

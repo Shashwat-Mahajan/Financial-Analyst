@@ -5,8 +5,9 @@ import asyncio
 import os
 import sys
 import tempfile
-
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from guardrails import get_guardrails
+
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from typing import List
@@ -20,7 +21,8 @@ from rag import (
     sanitize_urls,
     VECTORSTORE_DIR,
 )
-from guardrails import get_guardrails
+
+
 
 router = APIRouter(prefix="/rag", tags=["RAG"])
 
