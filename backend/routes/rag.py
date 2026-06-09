@@ -41,15 +41,16 @@ def query(body: QueryRequest, user: dict = Depends(get_current_user)):
         raise HTTPException(status_code=400, detail="Question cannot be empty")
 
     try:
-        initialize_components()
+        # ✅ Check guardrails FIRST before initializing anything
         guardrails = get_guardrails()
+        is_allowed, rejection = guardrails.apply_input_rail(body.question)
+        if not is_allowed:
+            return QueryResponse(answer=rejection, sources=[])
 
-        # Run through full guardrails pipeline
-        final_answer, sources, was_flagged = guardrails.process_query(
-            query=body.question,
-            generate_fn=generate_answer,
-        )
-
+        # Only initialize if query is allowed
+        initialize_components()
+        answer, sources = generate_answer(body.question)
+        final_answer, flagged = guardrails.apply_output_rail(answer, sources)
         return QueryResponse(answer=final_answer, sources=sources)
 
     except Exception as e:

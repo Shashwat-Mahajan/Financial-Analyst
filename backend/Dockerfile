@@ -1,26 +1,29 @@
-#FROM ubuntu:latest
-#LABEL authors="ASUS"
-#
-#ENTRYPOINT ["top", "-b"]
-
 FROM python:3.11-slim
 
 WORKDIR /app
 
-# System dependencies
 RUN apt-get update && apt-get install -y \
-    gcc g++ make curl \
+    gcc g++ make curl libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python deps first (cached layer)
+# Pin bcrypt first
+RUN pip install --no-cache-dir bcrypt==4.0.1
+
+# Install torch 2.7 CPU (needed by transformers 5.x + sentence-transformers 5.x)
+RUN pip install --no-cache-dir \
+    "torch==2.7.0+cpu" \
+    --extra-index-url https://download.pytorch.org/whl/cpu
+
+# Install everything else — let pip resolve versions freely
 COPY requirements.txt .
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Install NeMo Guardrails separately
-RUN pip install --no-cache-dir nemoguardrails
+# Install NeMo last
+RUN pip install --no-cache-dir nemoguardrails==0.22.0
 
-# Copy app code
+# Re-pin bcrypt — must be last as nemoguardrails may override
+RUN pip install --no-cache-dir bcrypt==4.0.1
+
 COPY . .
 
 EXPOSE 8000

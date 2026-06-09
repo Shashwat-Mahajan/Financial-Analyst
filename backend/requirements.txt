@@ -1,24 +1,35 @@
-# ── Existing RAG dependencies ─────────────────────────────────────────────────
+# LangChain
 langchain
 langchain-core
 langchain-chroma
 langchain-groq
 langchain-huggingface
 langchain-text-splitters
+
+# Vector DB
 chromadb
+
+# ML — let pip pick compatible versions with torch 2.7
+sentence-transformers
+transformers
+
+# Utils
 python-dotenv
 beautifulsoup4
 pdfplumber
 httpx
 boto3
-sentence-transformers
+nest_asyncio
 
-# ── Phase 2 additions ─────────────────────────────────────────────────────────
+# FastAPI
 fastapi
 uvicorn[standard]
+python-multipart
+
+# Auth
 python-jose[cryptography]
 passlib[bcrypt]
-supabase
 pydantic[email]
-python-multipart
-nest_asyncio
+
+# Database
+supabase

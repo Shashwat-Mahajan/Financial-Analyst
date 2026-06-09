@@ -1,0 +1,16 @@
+define flow check financial topic
+  $is_financial = execute check_financial_topic(query=$user_message)
+  if not $is_financial
+    bot refuse off topic
+    stop
+
+define bot refuse off topic
+  "I'm a financial analyst AI and can only answer questions about companies, stocks, earnings, revenue, financial metrics, and market analysis. Please ask a finance-related question."
+
+define flow check output for hallucination
+  $has_citation = execute check_citation(response=$bot_message)
+  if not $has_citation
+    bot add citation warning
+
+define bot add citation warning
+  "Note: This response may contain information not directly found in the indexed sources. Please verify with the original sources."

@@ -1,12 +1,11 @@
-# NeMo Guardrails Configuration
-# Defines the LLM, rails, and behavior for the Financial Analyst RAG system
-
 models:
   - type: main
     engine: groq
     model: llama-3.3-70b-versatile
+    parameters:
+      model_name: llama-3.3-70b-versatile
+      temperature: 0
 
-# Enable input and output rails
 rails:
   input:
     flows:
