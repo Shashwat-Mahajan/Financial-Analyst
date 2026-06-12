@@ -1,0 +1,42 @@
+[
+  {
+    "question": "What was Apple's revenue in the latest quarter?",
+    "ground_truth": "Apple reported quarterly revenue from its ingested earnings documents"
+  },
+  {
+    "question": "What is Microsoft's annual revenue?",
+    "ground_truth": "Microsoft annual revenue from ingested documents"
+  },
+  {
+    "question": "How has Tesla's revenue grown year over year?",
+    "ground_truth": "Tesla revenue growth from ingested earnings documents"
+  },
+  {
+    "question": "What is Apple's net profit margin?",
+    "ground_truth": "Apple profit margin from ingested financial documents"
+  },
+  {
+    "question": "How profitable is Microsoft's cloud segment?",
+    "ground_truth": "Microsoft cloud profitability from ingested documents"
+  },
+  {
+    "question": "Which company has higher revenue Apple or Microsoft?",
+    "ground_truth": "Comparison based on ingested documents for both companies"
+  },
+  {
+    "question": "What are the key risks facing Apple?",
+    "ground_truth": "Apple risk factors from ingested documents"
+  },
+  {
+    "question": "What is Microsoft's growth outlook?",
+    "ground_truth": "Microsoft growth guidance from ingested documents"
+  },
+  {
+    "question": "What challenges does Tesla face in the EV market?",
+    "ground_truth": "Tesla challenges from ingested documents"
+  },
+  {
+    "question": "What are the key financial metrics across all companies?",
+    "ground_truth": "Financial metrics from all ingested company documents"
+  }
+]

@@ -6,6 +6,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from routes.auth import router as auth_router
 from routes.rag  import router as rag_router
+from eval_route import router as eval_router
+
 
 app = FastAPI(
     title="Financial Analyst RAG API",
@@ -14,6 +16,7 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc",
 )
+app.include_router(eval_router)
 
 # ── CORS ──────────────────────────────────────────────────────────────────────
 app.add_middleware(

@@ -3,8 +3,7 @@ models:
     engine: groq
     model: llama-3.3-70b-versatile
     parameters:
-      model_name: llama-3.3-70b-versatile
-      temperature: 0
+      api_key: gsk_xxxxxxxxx
 
 rails:
   input:

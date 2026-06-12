@@ -165,14 +165,21 @@ class FinancialGuardrails:
         """Initialize NeMo Guardrails — falls back gracefully if unavailable."""
         try:
             from nemoguardrails import RailsConfig, LLMRails
-            config      = RailsConfig.from_path(str(self.config_path))
+
+            print("[Guardrails] Import successful")
+
+            config = RailsConfig.from_path(str(self.config_path))
+
             self._rails = LLMRails(config)
+
             print("[Guardrails] NeMo Guardrails initialized successfully.")
-        except ImportError:
-            print("[Guardrails] NeMo not installed — using custom rails only.")
+
+        except ImportError as e:
+            print("[Guardrails] NeMo package missing:", repr(e))
             self._rails = None
+
         except Exception as e:
-            print(f"[Guardrails] NeMo init failed: {e} — using custom rails only.")
+            print("[Guardrails] NeMo initialization error:", repr(e))
             self._rails = None
 
     def apply_input_rail(self, query: str) -> tuple[bool, Optional[str]]:

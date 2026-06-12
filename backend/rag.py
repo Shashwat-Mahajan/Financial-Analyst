@@ -19,6 +19,7 @@ import threading
 from pathlib import Path
 from urllib.parse import urlparse
 from uuid import uuid4
+from langsmith import traceable
 
 import httpx
 import nest_asyncio
@@ -355,7 +356,11 @@ def extract_companies_from_docs(docs):
         if "nvidia"    in source: companies.add("NVIDIA")
     return list(companies)
 
-
+@traceable(
+    name="RAG Query",
+    tags=["production", "financial-analyst"],
+    metadata={"phase": "4", "project": "financial-analyst-rag"}
+)
 def generate_answer(query):
     if not vector_store:
         raise RuntimeError("Vector DB not initialised.")
