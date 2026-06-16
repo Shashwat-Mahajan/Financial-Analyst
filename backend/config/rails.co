@@ -1,3 +1,15 @@
+# config/rails.co — NeMo Guardrails Colang flow definitions
+#
+# These flows execute inside NeMo's Colang runtime when LLMRails.generate_async()
+# is called. The 'execute' statements call Python functions registered via
+# rails.register_action() in guardrails.py.
+#
+# Action signatures (must match register_action names):
+#   check_financial_topic(query: str) -> bool
+#   check_citation(response: str) -> bool
+
+# ── Input rail ────────────────────────────────────────────────────────────────
+
 define flow check financial topic
   $is_financial = execute check_financial_topic(query=$user_message)
   if not $is_financial
@@ -7,10 +19,13 @@ define flow check financial topic
 define bot refuse off topic
   "I'm a financial analyst AI and can only answer questions about companies, stocks, earnings, revenue, financial metrics, and market analysis. Please ask a finance-related question."
 
+# ── Output rail ───────────────────────────────────────────────────────────────
+
 define flow check output for hallucination
   $has_citation = execute check_citation(response=$bot_message)
   if not $has_citation
     bot add citation warning
+    stop
 
 define bot add citation warning
-  "Note: This response may contain information not directly found in the indexed sources. Please verify with the original sources."
+  "⚠️ Verification Notice: This response contains specific financial figures that could not be fully verified against indexed source documents. Please cross-reference with original sources before making any financial decisions."

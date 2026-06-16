@@ -18,7 +18,25 @@ RUN pip install --no-cache-dir \
 
 COPY requirements.txt .
 
-RUN pip install --no-cache-dir -r requirements.txt
+# Install in smaller batches to avoid network timeouts
+RUN pip install --no-cache-dir \
+    langchain langchain-core langchain-chroma \
+    langchain-groq langchain-huggingface langchain-text-splitters
+
+RUN pip install --no-cache-dir \
+    chromadb sentence-transformers transformers
+
+RUN pip install --no-cache-dir \
+    python-dotenv beautifulsoup4 pdfplumber httpx boto3 nest_asyncio
+
+RUN pip install --no-cache-dir \
+    fastapi "uvicorn[standard]" python-multipart
+
+RUN pip install --no-cache-dir \
+    "python-jose[cryptography]" "passlib[bcrypt]" "pydantic[email]" supabase
+
+RUN pip install --no-cache-dir \
+    ragas datasets langsmith
 
 RUN pip install --no-cache-dir nemoguardrails==0.22.0
 
@@ -28,4 +46,4 @@ COPY . .
 
 EXPOSE 8000
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port" ,"8000"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

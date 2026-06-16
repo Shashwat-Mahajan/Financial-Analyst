@@ -1,120 +1,23 @@
 {
   "summary": {
-    "faithfulness": 0.6142857142857142,
-    "answer_relevancy": 0.49097110745139655,
+    "faithfulness": NaN,
+    "answer_relevancy": 0.98,
     "context_recall": 0.0,
-    "questions_evaluated": 10
+    "questions_evaluated": 1
   },
   "per_question": [
     {
       "user_input": "What was Apple's revenue in the latest quarter?",
       "retrieved_contexts": [
+        "https://www.cnbc.com/2025/10/29/microsoft-msft-q1-2026-earnings-report.html",
+        "https://www.cnbc.com/2026/04/22/tesla-tsla-q1-2026-earnings-report.html",
         "https://www.cnbc.com/2026/01/29/apple-aapl-earnings-report-q1-2026.html"
       ],
-      "response": "* Apple's revenue in the latest quarter was $143.76 billion.\n* This is compared to the estimated revenue of $138.48 billion.\n* The revenue represents a 16% increase on an annual basis.\n\n**Breakdown of Revenue:**\n* iPhone revenue: $85.27 billion\n* Mac revenue: $8.39 billion\n* iPad revenue: $8.60 billion\n* Wearables, Home and Accessories revenue: $11.49 billion\n* Services revenue: $30.01 billion\n\n**Conclusion:**\n* Apple's revenue in the latest quarter surpassed expectations, driven by strong sales of the iPhone 17 models.\n* The company's revenue growth was 16% on an annual basis, with iPhone revenue surging 23% to $85.27 billion.",
-      "reference": "Apple reported quarterly revenue from its ingested earnings documents",
-      "faithfulness": NaN,
-      "answer_relevancy": 0.9819422149027931,
+      "response": "* Apple's revenue in the latest quarter was $143.76 billion, which surpassed expectations of $138.48 billion.\n* This represents a 16% increase on an annual basis.\n* Here's a breakdown of Apple's revenue by product category:\n  * iPhone revenue: $85.27 billion\n  * Mac revenue: $8.39 billion\n  * iPad revenue: $8.60 billion\n  * Wearables, Home and Accessories revenue: $11.49 billion\n  * Services revenue: $30.01 billion\n\nNote: The context does not provide information on other companies' revenue for the same quarter, so a comparison cannot be made. \n\nFinal conclusion: \n* Apple's revenue in the latest quarter was $143.76 billion, with a 16% annual increase.",
+      "reference": "Apple reported strong quarterly revenue driven by iPhone sales, services growth, and international markets performance.",
+      "faithfulness": 0.0,
+      "answer_relevancy": 0.9795465093972935,
       "context_recall": 0.0
-    },
-    {
-      "user_input": "What is Microsoft's annual revenue?",
-      "retrieved_contexts": [
-        "https://www.cnbc.com/2026/01/29/apple-aapl-earnings-report-q1-2026.html"
-      ],
-      "response": "* Microsoft is not the main focus of the given context, which primarily discusses Apple's earnings report.\n* There is no information provided about Microsoft's annual revenue in the given context.\n* The context only mentions Microsoft in comparison to Apple's spending on artificial intelligence technology, stating that Microsoft has committed to spending hundreds of billions on AI infrastructure.\n\n## Microsoft\n* No information is available about Microsoft's annual revenue in the given context.\n\n## Apple\n* The context provides information about Apple's earnings report, including revenue and sales data for various products and services.\n\nFinal Conclusion: \nI don't know Microsoft's annual revenue as it is not provided in the given context.",
-      "reference": "Microsoft annual revenue from ingested documents",
-      "faithfulness": 0.6666666666666666,
-      "answer_relevancy": 0.0,
-      "context_recall": 0.0
-    },
-    {
-      "user_input": "How has Tesla's revenue grown year over year?",
-      "retrieved_contexts": [
-        "https://www.cnbc.com/2026/01/29/apple-aapl-earnings-report-q1-2026.html"
-      ],
-      "response": "* There is no information provided about Tesla's revenue growth.\n* The context only discusses Apple's earnings report and does not mention Tesla.\n\n### Conclusion\nI don't know how Tesla's revenue has grown year over year, as there is no information provided about the company in the given context.",
-      "reference": "Tesla revenue growth from ingested earnings documents",
-      "faithfulness": 1.0,
-      "answer_relevancy": NaN,
-      "context_recall": 0.0
-    },
-    {
-      "user_input": "What is Apple's net profit margin?",
-      "retrieved_contexts": [
-        "https://www.cnbc.com/2026/01/29/apple-aapl-earnings-report-q1-2026.html"
-      ],
-      "response": "* To calculate the net profit margin, we need the net income and revenue.\n* Net income: $42.1 billion\n* Revenue: $143.76 billion\n* Net profit margin = (Net income / Revenue) * 100\n* Net profit margin = ($42.1 billion / $143.76 billion) * 100\n* Net profit margin = 29.3%\n\n### Apple\n* Net profit margin: 29.3%\n\n### Final Conclusion\n* Apple's net profit margin is 29.3%.",
-      "reference": "Apple profit margin from ingested financial documents",
-      "faithfulness": 0.5,
-      "answer_relevancy": NaN,
-      "context_recall": 0.0
-    },
-    {
-      "user_input": "How profitable is Microsoft's cloud segment?",
-      "retrieved_contexts": [
-        "https://www.cnbc.com/2026/01/29/apple-aapl-earnings-report-q1-2026.html"
-      ],
-      "response": "* There is no information provided about Microsoft's cloud segment in the given context.\n* The context only discusses Apple's earnings report and does not mention Microsoft's financial performance.\n\n### Microsoft\n* No information available\n\n### Apple\n* Revenue: $143.76 billion vs. $138.48 billion estimated\n* Net income: $42.1 billion, or $2.84 per share\n* iPhone revenue: $85.27 billion vs. $78.65 billion estimated\n* Services revenue: $30.01 billion vs. $30.07 billion estimated\n\n### Final Conclusion\nI don't know how profitable Microsoft's cloud segment is, as there is no information provided about Microsoft in the given context.",
-      "reference": "Microsoft cloud profitability from ingested documents",
-      "faithfulness": NaN,
-      "answer_relevancy": NaN,
-      "context_recall": 0.0
-    },
-    {
-      "user_input": "Which company has higher revenue Apple or Microsoft?",
-      "retrieved_contexts": [
-        "https://www.cnbc.com/2026/01/29/apple-aapl-earnings-report-q1-2026.html"
-      ],
-      "response": "* Apple's revenue: $143.76 billion\n* Microsoft's revenue: Not mentioned in the given context\n\nSince Microsoft's revenue is not mentioned, we cannot compare it with Apple's revenue. \n\n### Apple\n* Revenue: $143.76 billion\n* iPhone revenue: $85.27 billion\n* Mac revenue: $8.39 billion\n* iPad revenue: $8.60 billion\n* Wearables, Home and Accessories revenue: $11.49 billion\n* Services revenue: $30.01 billion\n\n### Microsoft\n* No information available in the given context\n\nFinal conclusion: \nI don't know which company has higher revenue, Apple or Microsoft, as Microsoft's revenue is not mentioned in the given context.",
-      "reference": "Comparison based on ingested documents for both companies",
-      "faithfulness": 0.3333333333333333,
-      "answer_relevancy": NaN,
-      "context_recall": 0.0
-    },
-    {
-      "user_input": "What are the key risks facing Apple?",
-      "retrieved_contexts": [
-        "https://www.cnbc.com/2026/01/29/apple-aapl-earnings-report-q1-2026.html"
-      ],
-      "response": "## Apple\n* The company is facing supply chain constraints due to high demand for iPhones, which may impact future sales.\n* Memory prices are surging due to an AI-related shortage, which could increase component costs and affect Apple's profit margins.\n* The company is experiencing constrained iPhone supply, which may limit sales growth in the upcoming period.\n* Apple is investing heavily in research and development, particularly in AI, which may increase expenses and impact profitability.\n\n## Comparison to Other Companies\n* Apple's spending on artificial intelligence technology is less than its peers, such as Meta and Microsoft, which have committed to spending hundreds of billions on AI infrastructure.\n\n## Final Conclusion\nThe key risks facing Apple include supply chain constraints, surging memory prices, constrained iPhone supply, and increased research and development expenses, particularly in AI. However, the company's strong sales and revenue growth, particularly in China, may help mitigate these risks.",
-      "reference": "Apple risk factors from ingested documents",
-      "faithfulness": NaN,
-      "answer_relevancy": NaN,
-      "context_recall": 0.0
-    },
-    {
-      "user_input": "What is Microsoft's growth outlook?",
-      "retrieved_contexts": [
-        "https://www.cnbc.com/2026/01/29/apple-aapl-earnings-report-q1-2026.html"
-      ],
-      "response": "* There is no information provided about Microsoft's growth outlook in the given context.\n* The context only discusses Apple's earnings report and its performance in different categories.\n* Microsoft is only mentioned as a peer that has committed to spending hundreds of billions on AI infrastructure, but no specific information is provided about its growth outlook.\n\nConclusion:\nI don't know Microsoft's growth outlook as it is not mentioned in the provided context.",
-      "reference": "Microsoft growth guidance from ingested documents",
-      "faithfulness": NaN,
-      "answer_relevancy": NaN,
-      "context_recall": 0.0
-    },
-    {
-      "user_input": "What challenges does Tesla face in the EV market?",
-      "retrieved_contexts": [
-        "https://www.cnbc.com/2026/01/29/apple-aapl-earnings-report-q1-2026.html"
-      ],
-      "response": "* I don't know about the challenges Tesla faces in the EV market, as there is no information provided about Tesla in the given context.\n* The context only discusses Apple's financial performance, product sales, and challenges related to memory prices and supply chain constraints.\n* There is no mention of Tesla or the EV market in the provided context.",
-      "reference": "Tesla challenges from ingested documents",
-      "faithfulness": 0.5714285714285714,
-      "answer_relevancy": NaN,
-      "context_recall": 0.0
-    },
-    {
-      "user_input": "What are the key financial metrics across all companies?",
-      "retrieved_contexts": [
-        "https://www.cnbc.com/2026/01/29/apple-aapl-earnings-report-q1-2026.html"
-      ],
-      "response": "* There is only one company mentioned in the context: Apple\n### Apple\n* Earnings Per Share (EPS): $2.84 vs. $2.67 estimated\n* Revenue: $143.76 billion vs. $138.48 billion estimated\n* Net Income: $42.1 billion\n* Gross Margin: 48.2% vs. 47.5% estimated\n* iPhone revenue: $85.27 billion vs. $78.65 billion estimated\n* Mac revenue: $8.39 billion vs. $8.95 billion estimated\n* iPad revenue: $8.60 billion vs. $8.13 billion estimated\n* Wearables, Home and Accessories revenue: $11.49 billion vs. $12.04 billion estimated\n* Services revenue: $30.01 billion vs. $30.07 billion estimated\n* Capital Expenditures: $2.37 billion\n* Research and Development Expenses: $10.89 billion\n\n### Final Conclusion\nThe key financial metrics for Apple indicate a strong performance, with revenue and net income surpassing expectations. The company saw significant growth in iPhone sales, particularly in China, and reported a gross margin of 48.2%. However, Mac sales fell short of expectations, and the company expects constrained iPhone supply in the current period.",
-      "reference": "Financial metrics from all ingested company documents",
-      "faithfulness": NaN,
-      "answer_relevancy": NaN,
-      "context_recall": NaN
     }
   ]
 }

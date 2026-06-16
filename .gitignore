@@ -136,6 +136,7 @@ celerybeat.pid
 
 # Environments
 backend/.env
+backend/task-definition.json
 .envrc
 .venv
 env/

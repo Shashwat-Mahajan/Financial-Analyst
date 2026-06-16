@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 
-const API = "http://localhost:8000";
+const API = "http://43.205.93.123:8000";
 
 const roleBadge = {
   admin:   "bg-purple-500/20 text-purple-300 border-purple-500/30",

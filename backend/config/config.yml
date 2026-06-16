@@ -1,9 +1,7 @@
 models:
   - type: main
-    engine: groq
+    engine: langchain
     model: llama-3.3-70b-versatile
-    parameters:
-      api_key: gsk_xxxxxxxxx
 
 rails:
   input:

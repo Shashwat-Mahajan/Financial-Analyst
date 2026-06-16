@@ -31,7 +31,7 @@ INGEST_TIMEOUT = 120
 
 # ── Query with guardrails ─────────────────────────────────────────────────────
 @router.post("/query", response_model=QueryResponse)
-def query(body: QueryRequest, user: dict = Depends(get_current_user)):
+async def query(body: QueryRequest, user: dict = Depends(get_current_user)):
     """
     All logged-in users can query.
     Phase 3: Input rail blocks off-topic queries.
@@ -43,13 +43,13 @@ def query(body: QueryRequest, user: dict = Depends(get_current_user)):
     try:
         # ✅ Check guardrails FIRST before initializing anything
         guardrails = get_guardrails()
-        is_allowed, rejection = guardrails.apply_input_rail(body.question)
+        is_allowed, rejection = await guardrails.apply_input_rail(body.question)
         if not is_allowed:
             return QueryResponse(answer=rejection, sources=[])
 
         # Only initialize if query is allowed
         initialize_components()
-        answer, sources = generate_answer(body.question)
+        answer, sources = await asyncio.to_thread(generate_answer, body.question)
         final_answer, flagged = guardrails.apply_output_rail(answer, sources)
         return QueryResponse(answer=final_answer, sources=sources)
 

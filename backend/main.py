@@ -39,14 +39,23 @@ app.include_router(rag_router)
 @app.on_event("startup")
 async def startup():
     """
-    Warms up ChromaDB and LLM in background on server start.
+    Warms up ChromaDB, LLM, and NeMo Guardrails in background on server start.
     First request won't have to wait for initialization.
     """
     def warmup():
         try:
-            from rag import initialize_components
             print("[Startup] Warming up components in background...")
-            initialize_components()
+
+            from guardrails import get_guardrails
+            get_guardrails()
+
+            try:
+                from rag import initialize_components
+                initialize_components()
+            except Exception as e:
+                # ChromaDB will re-initialize on first request if warmup fails
+                print(f"[Startup] RAG warmup failed (will retry on first request): {e}")
+
             print("[Startup] Warmup complete.")
         except Exception as e:
             print(f"[Startup] Warmup failed: {e}")
