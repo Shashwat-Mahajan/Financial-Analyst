@@ -16,7 +16,7 @@ export default function Register() {
     setError("");
     setSuccess("");
     try {
-      const res  = await fetch("http://43.205.93.123:8000/auth/register", {
+      const res  = await fetch("http://13.126.196.65:8000/auth/register", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
         body:    JSON.stringify({ email, password, role }),
