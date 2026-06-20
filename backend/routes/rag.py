@@ -1,5 +1,5 @@
 """
-routes/rag.py — with Phase 3 NeMo Guardrails integrated into /rag/query
+routes/rag.py — with Phase 3 NeMo Guardrails + Phase 5 Agentic RAG endpoint
 """
 import asyncio
 import os
@@ -29,11 +29,11 @@ router = APIRouter(prefix="/rag", tags=["RAG"])
 INGEST_TIMEOUT = 120
 
 
-# ── Query with guardrails ─────────────────────────────────────────────────────
+# ── Standard Query with guardrails ────────────────────────────────────────────
 @router.post("/query", response_model=QueryResponse)
 async def query(body: QueryRequest, user: dict = Depends(get_current_user)):
     """
-    All logged-in users can query.
+    Standard RAG query — linear pipeline.
     Phase 3: Input rail blocks off-topic queries.
              Output rail flags potential hallucinations.
     """
@@ -41,16 +41,54 @@ async def query(body: QueryRequest, user: dict = Depends(get_current_user)):
         raise HTTPException(status_code=400, detail="Question cannot be empty")
 
     try:
-        # ✅ Check guardrails FIRST before initializing anything
         guardrails = get_guardrails()
         is_allowed, rejection = await guardrails.apply_input_rail(body.question)
         if not is_allowed:
             return QueryResponse(answer=rejection, sources=[])
 
-        # Only initialize if query is allowed
         initialize_components()
         answer, sources = await asyncio.to_thread(generate_answer, body.question)
         final_answer, flagged = guardrails.apply_output_rail(answer, sources)
+        return QueryResponse(answer=final_answer, sources=sources)
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── Agentic Query with LangGraph ──────────────────────────────────────────────
+@router.post("/agent-query", response_model=QueryResponse)
+async def agent_query(body: QueryRequest, user: dict = Depends(get_current_user)):
+    """
+    Agentic RAG query — LangGraph multi-step pipeline.
+    Phase 5: Agent dynamically decides to retrieve, grade, rewrite,
+             and re-retrieve until context is sufficient (max 3 attempts).
+
+    Returns same QueryResponse as /rag/query but with an additional
+    'retrieval_attempts' field in the answer metadata.
+    """
+    if not body.question.strip():
+        raise HTTPException(status_code=400, detail="Question cannot be empty")
+
+    try:
+        # Input rail — same guardrails as standard query
+        guardrails = get_guardrails()
+        is_allowed, rejection = await guardrails.apply_input_rail(body.question)
+        if not is_allowed:
+            return QueryResponse(answer=rejection, sources=[])
+
+        # Run agentic pipeline in thread (LangGraph is sync)
+        from agentic_rag import agentic_query
+        answer, sources, attempts = await asyncio.to_thread(
+            agentic_query, body.question
+        )
+
+        # Output rail
+        final_answer, flagged = guardrails.apply_output_rail(answer, sources)
+
+        # Append retrieval attempts info to answer for transparency
+        if attempts > 1:
+            final_answer += f"\n\n*🔄 Agent performed {attempts} retrieval attempts to answer this question.*"
+
         return QueryResponse(answer=final_answer, sources=sources)
 
     except Exception as e:
@@ -200,6 +238,7 @@ def get_status(user: dict = Depends(get_current_user)):
             "suggested_questions": suggested,
             "last_refreshed":      "Every 6 hours via GitHub Actions",
             "guardrails_active":   True,
+            "agentic_rag_active":  True,
         }
 
     except Exception:
@@ -211,6 +250,7 @@ def get_status(user: dict = Depends(get_current_user)):
             "suggested_questions": ["No data ingested yet."],
             "last_refreshed":      "Never",
             "guardrails_active":   True,
+            "agentic_rag_active":  True,
         }
 
 
