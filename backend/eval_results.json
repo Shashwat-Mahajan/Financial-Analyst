@@ -1,23 +1,55 @@
 {
   "summary": {
-    "faithfulness": NaN,
-    "answer_relevancy": 0.98,
-    "context_recall": 0.0,
-    "questions_evaluated": 1
+    "faithfulness": 0.875,
+    "answer_relevancy": 0.913,
+    "context_recall": 0.778,
+    "questions_evaluated": 3
   },
   "per_question": [
     {
-      "user_input": "What was Apple's revenue in the latest quarter?",
+      "user_input": "What was Apple revenue in the latest quarter?",
       "retrieved_contexts": [
-        "https://www.cnbc.com/2025/10/29/microsoft-msft-q1-2026-earnings-report.html",
-        "https://www.cnbc.com/2026/04/22/tesla-tsla-q1-2026-earnings-report.html",
-        "https://www.cnbc.com/2026/01/29/apple-aapl-earnings-report-q1-2026.html"
+        "$85.27 billion vs. $78.65 billion estimated Mac revenue: $8.39 billion vs. $8.95 billion estimated iPad revenue: $8.60 billion vs. $8.13 billion estimated Wearables, Home and Accessories revenue: $11.49 billion vs. $12.04 billion estimated Services revenue: $30.01 billion vs. $30.07 billion estimated Gross margin: 48.2% vs. 47.5% estimated Finance chief Kevan Parekh said that Apple expects revenue this quarter to rise between 13% and 16% on an annual basis, which would be equivalent to between",
+        "period. Overall iPhone revenue surged 23% on an annual basis to $85.27 billion, which the company attributed to strong sales of the iPhone 17 models released in September. \"The demand for iPhone was just simply staggering,\" Apple CEO Tim Cook told CNBC's Steve Kovach. The strong growth is a reversal from the holiday quarter last year , when Apple reported iPhone sales that declined slightly. Cook said Apple now has an active base of 2.5 billion iPhones, Macs and other Apple devices, up from",
+        "earnings on Thursday that surpassed expectations, with revenue soaring 16% on an annual basis. Shares of the company were up more than 1% in extended trading. Here are the results versus what Wall Street was expecting, according to LSEG consensus estimates for the quarter ending in December: EPS: $2.84 vs. $2.67 estimated Revenue: $143.76 billion vs. $138.48 billion estimated Here is how Apple performed versus LSEG consensus estimates: iPhone revenue: $85.27 billion vs. $78.65 billion estimated",
+        "came up short of Wall Street expectations, and fell 7% on an annual basis. The company released an updated MacBook Pro laptop with a new M4 chip in November. The iPad business grew 6% in the quarter on an annual basis to $8.6 billion in revenue, beating expectations. Cook said that half of the people who bought an iPad during the quarter had not previously owned one. The company reports AirPods, Apple Watch, Vision Pro and other accessories in a category called Wearables, Home and Accessories.",
+        "the quarter, but the company expects a bigger effect during the current period \"We do continue to see market pricing for memory increasing significantly,\" Cook said. Parekh said that Apple spent nearly $32 billion in the quarter on share repurchases and dividends. WATCH: Apple told us all about its new iPhone chips and on-device AI plans watch now VIDEO 13:46 13:46 How Apple is trying control all core iPhone chips and prioritize AI Tech Choose CNBC as your preferred source on Google and never"
       ],
-      "response": "* Apple's revenue in the latest quarter was $143.76 billion, which surpassed expectations of $138.48 billion.\n* This represents a 16% increase on an annual basis.\n* Here's a breakdown of Apple's revenue by product category:\n  * iPhone revenue: $85.27 billion\n  * Mac revenue: $8.39 billion\n  * iPad revenue: $8.60 billion\n  * Wearables, Home and Accessories revenue: $11.49 billion\n  * Services revenue: $30.01 billion\n\nNote: The context does not provide information on other companies' revenue for the same quarter, so a comparison cannot be made. \n\nFinal conclusion: \n* Apple's revenue in the latest quarter was $143.76 billion, with a 16% annual increase.",
-      "reference": "Apple reported strong quarterly revenue driven by iPhone sales, services growth, and international markets performance.",
-      "faithfulness": 0.0,
-      "answer_relevancy": 0.9795465093972935,
-      "context_recall": 0.0
+      "response": "* Apple revenue: $143.76 billion \n* This is compared to the estimated $138.48 billion. \n* The revenue increased by 16% on an annual basis. \n\nNote: The question only asks about Apple, so the information about other companies is not included in the answer.",
+      "reference": "Apple reported revenue of $143.76 billion in the latest quarter, compared to the estimated $138.48 billion, representing a 16% increase on an annual basis.",
+      "faithfulness": 1.0,
+      "answer_relevancy": 0.9335657396886239,
+      "context_recall": 1.0
+    },
+    {
+      "user_input": "What is Microsoft annual revenue?",
+      "retrieved_contexts": [
+        "of its Azure cloud infrastructure business in dollars for the first time. The company said revenue in fiscal 2025 from Azure and other cloud services jumped 34% from the prior year to more than $75 billion. For the fiscal second quarter, Microsoft said on the earnings call that expects revenue in the range of $79.5 billion to $80.6 billion. The middle of the range is $80.05 billion, while analysts were expecting $79.95 billion, according to LSEG. The company said it expects Azure growth at",
+        "of its Azure cloud infrastructure business in dollars for the first time. The company said revenue in fiscal 2025 from Azure and other cloud services jumped 34% from the prior year to more than $75 billion. For the fiscal second quarter, Microsoft said on the earnings call that expects revenue in the range of $79.5 billion to $80.6 billion. The middle of the range is $80.05 billion, while analysts were expecting $79.95 billion, according to LSEG. The company said it expects Azure growth at",
+        "The More Personal Computing unit, which includes Windows, search advertising, devices and video games, reported 4% growth to $13.8 billion in revenue. That was above StreetAccount's $12.83 billion consensus. Microsoft's earnings landed hours after the company experienced an outage in Azure and its 365 services. Various websites and games were down for hours, and Microsoft said it expects recovery by this evening. Microsoft shares are up 28% this year, as of Wednesday's close, and hit a record a",
+        "The More Personal Computing unit, which includes Windows, search advertising, devices and video games, reported 4% growth to $13.8 billion in revenue. That was above StreetAccount's $12.83 billion consensus. Microsoft's earnings landed hours after the company experienced an outage in Azure and its 365 services. Various websites and games were down for hours, and Microsoft said it expects recovery by this evening. Microsoft shares are up 28% this year, as of Wednesday's close, and hit a record a",
+        "$77.67 billion vs. $75.33 billion expected Revenue increased 18% in the fiscal first quarter from $65.6 billion a year ago, according to a release. Net income rose to $27.7 billion from $24.67 billion, or $3.30 per share, during the same period last year. Microsoft said its investment in OpenAI resulted in a $3.1 billion hit to net income in the quarter, equivalent to 41 cents per share. Microsoft's Intelligent Cloud unit, which includes Azure , reported $30.9 billion in revenue, up 28% from a"
+      ],
+      "response": "* Microsoft's revenue for fiscal 2025 from Azure and other cloud services jumped 34% from the prior year to more than $75 billion.\n* For the fiscal first quarter, Microsoft's revenue was $77.67 billion.\n* The company expects revenue in the range of $79.5 billion to $80.6 billion for the fiscal second quarter.\n* However, the annual revenue is not explicitly stated in the given context. \n\nI don't know the exact annual revenue of Microsoft.",
+      "reference": "Microsoft reported revenue of $77.67 billion for the fiscal first quarter. Azure and other cloud services revenue jumped 34% from the prior year to more than $75 billion for fiscal 2025. Microsoft expects revenue in the range of $79.5 billion to $80.6 billion for the fiscal second quarter.",
+      "faithfulness": 1.0,
+      "answer_relevancy": 0.0,
+      "context_recall": 1.0
+    },
+    {
+      "user_input": "How has Tesla revenue grown year over year?",
+      "retrieved_contexts": [
+        "which sells solar installations and a range of battery energy storage systems, Tesla reported $2.41 billion in revenue for the quarter, down 12% from $2.73 billion in the year-ago period. Musk has been trying to change the narrative surrounding his company by focusing on efforts in self-driving technology and humanoid robots. While the company is testing a small number of driverless cars in its ride-hailing service in Texas, Tesla still relies on EV sales for the bulk of its revenue and doesn't",
+        "which sells solar installations and a range of battery energy storage systems, Tesla reported $2.41 billion in revenue for the quarter, down 12% from $2.73 billion in the year-ago period. Musk has been trying to change the narrative surrounding his company by focusing on efforts in self-driving technology and humanoid robots. While the company is testing a small number of driverless cars in its ride-hailing service in Texas, Tesla still relies on EV sales for the bulk of its revenue and doesn't",
+        "call that spending this year will be $5 billion above prior guidance. Here's how the company did, compared with estimates from analysts polled by LSEG: Earnings per share : 41 cents adjusted vs. 37 cents expected Revenue : $22.39 billion vs. $22.64 billion expected Tesla's stock has underperformed all of its megacap peers so far this year, dropping 14% as of Wednesday's close. The company's core automotive business continues to struggle against competitors across the globe like China's BYD and",
+        "call that spending this year will be $5 billion above prior guidance. Here's how the company did, compared with estimates from analysts polled by LSEG: Earnings per share : 41 cents adjusted vs. 37 cents expected Revenue : $22.39 billion vs. $22.64 billion expected Tesla's stock has underperformed all of its megacap peers so far this year, dropping 14% as of Wednesday's close. The company's core automotive business continues to struggle against competitors across the globe like China's BYD and",
+        "declines in the past two years, with a drop in the year-ago quarter partially attributable to \"the loss of several weeks of production,\" as the company was upgrading Model Y factory lines. Net income increased to $477 million, or 13 cents a share, from $409 million, or 12 cents a share, a year earlier. Tesla's automotive gross margins, excluding the sales of environmental regulatory credits, came in at 19.2%, higher than in any quarter last year. The company said margins were helped by higher"
+      ],
+      "response": "## Tesla\n* Revenue for the quarter: $2.41 billion, down 12% from $2.73 billion in the year-ago period\n* Revenue increased 16% in the quarter from $19.3 billion a year earlier, to $22.39 billion\n* Automotive revenue rose 16% to $16.2 billion from $14 billion a year ago\n\n## Comparison to other companies\n* No direct comparison to other companies' revenue growth is provided in the context\n\n## Conclusion\n* Tesla's revenue has not consistently grown year over year, with a 12% decline in one quarter and a 16% increase in another quarter.",
+      "reference": "Tesla overall revenue increased 16% in the quarter from $19.3 billion a year earlier. Auto segment revenue rose 16% to $16.2 billion from $14 billion a year ago. However, some segments saw a 12% decrease from $2.73 billion to $2.41 billion year over year.",
+      "faithfulness": 0.625,
+      "answer_relevancy": 0.8923346428909877,
+      "context_recall": 0.3333333333333333
     }
   ]
 }

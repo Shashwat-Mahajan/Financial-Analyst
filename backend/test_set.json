@@ -1,22 +1,22 @@
 [
   {
-    "question": "What was Apple's revenue in the latest quarter?",
-    "ground_truth": "Apple reported strong quarterly revenue driven by iPhone sales, services growth, and international markets performance."
+    "question": "What was Apple revenue in the latest quarter?",
+    "ground_truth": "Apple reported revenue of $143.76 billion in the latest quarter, compared to the estimated $138.48 billion, representing a 16% increase on an annual basis."
   },
   {
-    "question": "What is Microsoft's annual revenue?",
-    "ground_truth": "Microsoft generates annual revenue from cloud services including Azure, Office 365, and enterprise software products."
+    "question": "What is Microsoft annual revenue?",
+    "ground_truth": "Microsoft reported revenue of $77.67 billion for the fiscal first quarter. Azure and other cloud services revenue jumped 34% from the prior year to more than $75 billion for fiscal 2025. Microsoft expects revenue in the range of $79.5 billion to $80.6 billion for the fiscal second quarter."
   },
   {
-    "question": "How has Tesla's revenue grown year over year?",
-    "ground_truth": "Tesla revenue growth is driven by increased vehicle deliveries, energy storage deployments, and services revenue."
+    "question": "How has Tesla revenue grown year over year?",
+    "ground_truth": "Tesla overall revenue increased 16% in the quarter from $19.3 billion a year earlier. Auto segment revenue rose 16% to $16.2 billion from $14 billion a year ago. However, some segments saw a 12% decrease from $2.73 billion to $2.41 billion year over year."
   },
   {
     "question": "What are the key risks facing Apple?",
-    "ground_truth": "Apple faces risks including supply chain concentration, regulatory scrutiny, competition in smartphone market, and China exposure."
+    "ground_truth": "Apple faces key risks including supply chain constraints due to high demand for iPhones, increased memory prices due to AI-related shortages affecting profit margins, and reliance on advanced chip manufacturing. The company also faces uncertainty around handling increased component costs due to surging memory prices."
   },
   {
-    "question": "What is Microsoft's growth outlook?",
-    "ground_truth": "Microsoft growth is driven by Azure cloud adoption, AI integration across products, and enterprise software demand."
+    "question": "What is Microsoft growth outlook?",
+    "ground_truth": "Microsoft Azure cloud business recorded 40% growth in the fiscal first quarter. The company expects Azure growth at constant currency to be 37% in the fiscal second quarter. Revenue is expected in the range of $79.5 billion to $80.6 billion for fiscal Q2. Capex growth rate for fiscal 2026 will be above the rate in 2025, with Q1 capex at $34.9 billion."
   }
 ]

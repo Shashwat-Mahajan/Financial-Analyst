@@ -1,6 +1,10 @@
 """
 evaluation.py — Phase 4 Ragas Evaluation Pipeline
-Fixed: Updated Ragas 0.4.x API, rate limit handling
+Fixed:
+  - max_tokens increased to 1024 (fixes LLMDidNotFinishException)
+  - contexts now pass actual chunk text instead of source URLs
+    (fixes context_recall: 0.0 — Ragas needs text not URLs)
+  - Updated Ragas 0.4.x API
 """
 
 import os
@@ -36,8 +40,12 @@ def run_evaluation(max_questions: int = 5):
 
     print("[Ragas] Starting evaluation...")
 
-    from rag import generate_answer, initialize_components
+    from rag import initialize_components, vector_store as vs
     initialize_components()
+
+    # Import vector_store after initialize_components runs
+    import rag
+    vector_store = rag.vector_store
 
     test_set = load_test_set()[:max_questions]
     results  = []
@@ -45,11 +53,21 @@ def run_evaluation(max_questions: int = 5):
     for i, item in enumerate(test_set):
         print(f"[Ragas] Processing {i+1}/{len(test_set)}: {item['question'][:50]}...")
         try:
+            from rag import generate_answer
             answer, sources = generate_answer(item["question"])
+
+            # ── Key fix: retrieve actual chunk text for Ragas context ──
+            # Ragas context_recall needs the actual text content, not URLs.
+            # similarity_search returns Document objects with page_content.
+            retrieved_docs = vector_store.similarity_search(item["question"], k=5)
+            contexts = [doc.page_content for doc in retrieved_docs]
+            if not contexts:
+                contexts = ["No context retrieved"]
+
             results.append({
                 "question":     item["question"],
                 "answer":       answer,
-                "contexts":     sources if sources else ["No context retrieved"],
+                "contexts":     contexts,
                 "ground_truth": item.get("ground_truth", ""),
             })
             time.sleep(3)  # avoid rate limits between questions
@@ -66,15 +84,15 @@ def run_evaluation(max_questions: int = 5):
     dataset = Dataset.from_list([{
         "user_input":         r["question"],
         "response":           r["answer"],
-        "retrieved_contexts": r["contexts"] if isinstance(r["contexts"], list) else [r["contexts"]],
+        "retrieved_contexts": r["contexts"],
         "reference":          r["ground_truth"],
     } for r in results])
 
-    # Initialize LLM and embeddings
+    # ── Fix: increased max_tokens to 1024 (was 500 — caused LLMDidNotFinishException)
     llm = LangchainLLMWrapper(ChatGroq(
         model="llama-3.3-70b-versatile",
         temperature=0,
-        max_tokens=500,
+        max_tokens=1024,
         api_key=os.getenv("GROQ_API_KEY"),
     ))
 
@@ -84,10 +102,9 @@ def run_evaluation(max_questions: int = 5):
         encode_kwargs={"normalize_embeddings": True},
     ))
 
-    # Initialize metric objects (Ragas 0.4.x requires instantiated objects)
-    faithfulness    = Faithfulness(llm=llm)
+    faithfulness     = Faithfulness(llm=llm)
     answer_relevancy = AnswerRelevancy(llm=llm, embeddings=embeddings)
-    context_recall  = ContextRecall(llm=llm)
+    context_recall   = ContextRecall(llm=llm)
 
     print("[Ragas] Running metrics...")
     try:
