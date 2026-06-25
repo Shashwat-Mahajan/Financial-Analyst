@@ -59,35 +59,32 @@ async def query(body: QueryRequest, user: dict = Depends(get_current_user)):
 @router.post("/agent-query", response_model=QueryResponse)
 async def agent_query(body: QueryRequest, user: dict = Depends(get_current_user)):
     """
-    Agentic RAG query — LangGraph multi-step pipeline.
-    Phase 5: Agent dynamically decides to retrieve, grade, rewrite,
-             and re-retrieve until context is sufficient (max 3 attempts).
-
-    Returns same QueryResponse as /rag/query but with an additional
-    'retrieval_attempts' field in the answer metadata.
+    Agentic RAG — LangGraph pipeline with autonomous web fetching.
+    Phase 5: Agent searches ChromaDB, grades context, and autonomously
+             fetches live financial URLs when knowledge base is insufficient.
     """
     if not body.question.strip():
         raise HTTPException(status_code=400, detail="Question cannot be empty")
 
     try:
-        # Input rail — same guardrails as standard query
         guardrails = get_guardrails()
         is_allowed, rejection = await guardrails.apply_input_rail(body.question)
         if not is_allowed:
             return QueryResponse(answer=rejection, sources=[])
 
-        # Run agentic pipeline in thread (LangGraph is sync)
         from agentic_rag import agentic_query
-        answer, sources, attempts = await asyncio.to_thread(
+        answer, sources, web_fetch_count = await asyncio.to_thread(
             agentic_query, body.question
         )
 
-        # Output rail
         final_answer, flagged = guardrails.apply_output_rail(answer, sources)
 
-        # Append retrieval attempts info to answer for transparency
-        if attempts > 1:
-            final_answer += f"\n\n*🔄 Agent performed {attempts} retrieval attempts to answer this question.*"
+        # Show agent's actions transparently
+        if web_fetch_count > 0:
+            final_answer += (
+                f"\n\n*🤖 Agent autonomously fetched {web_fetch_count} live "
+                f"financial source(s) to answer this question.*"
+            )
 
         return QueryResponse(answer=final_answer, sources=sources)
 

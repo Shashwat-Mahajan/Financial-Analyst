@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 
-const API = "http://13.126.196.65:8000";
+const API = "http://15.207.188.160:8000";
 
 const roleBadge = {
   admin:   "bg-purple-500/20 text-purple-300 border-purple-500/30",
@@ -55,7 +55,6 @@ function DropZone({ accept, multiple = false, files, onFiles, icon, label, hint 
         />
       </div>
 
-      {/* File list */}
       {files.length > 0 && (
         <div className="mt-3 space-y-1">
           {files.map((f, i) => (
@@ -89,6 +88,8 @@ export default function Dashboard() {
   const [ingestMode, setIngestMode] = useState("urls");
   const [files, setFiles]           = useState([]);
   const [ragStatus, setRagStatus]   = useState(null);
+  const [agentMode, setAgentMode]   = useState(false);   // ← Agentic RAG toggle
+  const [agentInfo, setAgentInfo]   = useState(null);    // ← stores agent metadata
   const navigate                    = useNavigate();
 
   const token     = localStorage.getItem("token");
@@ -110,17 +111,37 @@ export default function Dashboard() {
   // ── Query ──────────────────────────────────────────────────────────────────
   const handleQuery = async () => {
     if (!question.trim()) return;
-    setQuerying(true); setAnswer(""); setSources([]);
+    setQuerying(true);
+    setAnswer("");
+    setSources([]);
+    setAgentInfo(null);
+
+    // Choose endpoint based on mode
+    const endpoint = agentMode ? "/rag/agent-query" : "/rag/query";
+
     try {
-      const res  = await fetch(`${API}/rag/query`, {
+      const res  = await fetch(`${API}${endpoint}`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ question }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail);
-      setAnswer(data.answer);
+
+      // Extract agent metadata from answer if present
+      let finalAnswer = data.answer;
+      let fetchedLive = false;
+
+      if (agentMode && finalAnswer.includes("🤖 Agent autonomously fetched")) {
+        fetchedLive = true;
+      }
+
+      setAnswer(finalAnswer);
       setSources(data.sources);
+      if (agentMode) {
+        setAgentInfo({ fetchedLive });
+      }
+
     } catch (err) {
       setAnswer(`Error: ${err.message}`);
     } finally {
@@ -217,6 +238,11 @@ export default function Dashboard() {
                 <span>🗂 <span className="text-white font-semibold">{ragStatus.total_chunks}</span> chunks</span>
                 <span>🔗 <span className="text-white font-semibold">{ragStatus.total_sources}</span> sources</span>
                 <span>🔄 {ragStatus.last_refreshed}</span>
+                {ragStatus.agentic_rag_active && (
+                  <span className="bg-purple-500/20 text-purple-300 border border-purple-500/30 px-2 py-0.5 rounded-full text-xs">
+                    🤖 Agentic RAG Active
+                  </span>
+                )}
               </div>
             </div>
 
@@ -255,7 +281,47 @@ export default function Dashboard() {
 
           {/* Query Panel */}
           <div className="bg-slate-900 rounded-2xl border border-slate-800 p-6">
-            <h2 className="text-lg font-semibold mb-4">💬 Ask a Question</h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold">💬 Ask a Question</h2>
+
+              {/* ── Agentic RAG Toggle ── */}
+              <div className="flex items-center gap-2">
+                <span className={`text-xs font-medium ${!agentMode ? "text-blue-400" : "text-slate-500"}`}>
+                  Standard
+                </span>
+                <button
+                  onClick={() => {
+                    setAgentMode(!agentMode);
+                    setAnswer("");
+                    setSources([]);
+                    setAgentInfo(null);
+                  }}
+                  className={`relative w-11 h-6 rounded-full transition-colors duration-200 focus:outline-none ${
+                    agentMode ? "bg-purple-600" : "bg-slate-700"
+                  }`}
+                >
+                  <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform duration-200 ${
+                    agentMode ? "translate-x-6" : "translate-x-1"
+                  }`} />
+                </button>
+                <span className={`text-xs font-medium ${agentMode ? "text-purple-400" : "text-slate-500"}`}>
+                  Agentic 🤖
+                </span>
+              </div>
+            </div>
+
+            {/* Mode description */}
+            <div className={`text-xs px-3 py-2 rounded-lg mb-3 ${
+              agentMode
+                ? "bg-purple-500/10 border border-purple-500/20 text-purple-300"
+                : "bg-blue-500/10 border border-blue-500/20 text-blue-300"
+            }`}>
+              {agentMode
+                ? "🤖 Agentic mode — agent will autonomously fetch live financial data if your question isn't in the knowledge base"
+                : "⚡ Standard mode — fast retrieval from indexed knowledge base"
+              }
+            </div>
+
             <textarea
               value={question}
               onChange={e => setQuestion(e.target.value)}
@@ -267,7 +333,11 @@ export default function Dashboard() {
             <button
               onClick={handleQuery}
               disabled={querying || !question.trim()}
-              className="mt-3 w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-700 disabled:text-slate-500 text-white font-semibold py-3 rounded-xl transition text-sm flex items-center justify-center gap-2"
+              className={`mt-3 w-full disabled:bg-slate-700 disabled:text-slate-500 text-white font-semibold py-3 rounded-xl transition text-sm flex items-center justify-center gap-2 ${
+                agentMode
+                  ? "bg-purple-600 hover:bg-purple-700"
+                  : "bg-blue-600 hover:bg-blue-700"
+              }`}
             >
               {querying ? (
                 <>
@@ -275,14 +345,25 @@ export default function Dashboard() {
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
                   </svg>
-                  Thinking...
+                  {agentMode ? "Agent thinking..." : "Thinking..."}
                 </>
-              ) : "🔍 Get Answer"}
+              ) : agentMode ? "🤖 Agent Query" : "🔍 Get Answer"}
             </button>
 
             {answer && (
               <div className="mt-5 bg-slate-950 rounded-xl border border-slate-800 p-4">
-                <p className="text-xs text-slate-500 uppercase tracking-wider mb-2 font-semibold">🧠 Answer</p>
+                <div className="flex items-center gap-2 mb-2">
+                  <p className="text-xs text-slate-500 uppercase tracking-wider font-semibold">🧠 Answer</p>
+                  {agentMode && (
+                    <span className={`text-xs px-2 py-0.5 rounded-full border ${
+                      agentInfo?.fetchedLive
+                        ? "bg-purple-500/20 text-purple-300 border-purple-500/30"
+                        : "bg-blue-500/20 text-blue-300 border-blue-500/30"
+                    }`}>
+                      {agentInfo?.fetchedLive ? "🤖 Fetched live data" : "🤖 From knowledge base"}
+                    </span>
+                  )}
+                </div>
                 <p className="text-slate-200 text-sm leading-relaxed whitespace-pre-wrap">{answer}</p>
                 {sources.length > 0 && (
                   <div className="mt-4 pt-4 border-t border-slate-800">

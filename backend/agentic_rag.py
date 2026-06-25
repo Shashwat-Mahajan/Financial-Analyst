@@ -1,82 +1,231 @@
 """
-agentic_rag.py — Agentic RAG with LangGraph
-Phase 5: Dynamic multi-step retrieval with self-evaluation
+agentic_rag.py — True Agentic RAG with LangGraph
+Phase 5: Agent autonomously decides which tools to use
 
-Graph nodes:
-    1. retrieve  — ChromaDB similarity search
-    2. grade     — LLM evaluates if context is sufficient
-    3. generate  — produces final answer if context passes grading
-    4. rewrite   — expands query and loops back to retrieve if context fails
+Graph flow:
+    search_chromadb → grade_context
+        → SUFFICIENT  → generate_answer → END
+        → INSUFFICIENT → web_search_urls → fetch_live_url
+                          → search_chromadb (loop, max 2 web fetches)
+                          → MAX REACHED → generate_answer → END
 
-Max 3 retrieval attempts to prevent infinite loops.
-
-Flow:
-    retrieve → grade → generate   (if context is sufficient)
-                     → rewrite → retrieve (loop, max 3 times)
+Fixes:
+    - candidate_urls in AgentState (was dropped between nodes)
+    - web_fetch_count increments correctly
+    - No hardcoded URLs — DuckDuckGo HTML search finds real URLs
+    - Async web search runs in thread to avoid blocking event loop
 """
 
 import os
-from typing import TypedDict, List, Annotated
+import httpx
+from typing import TypedDict, List
 from dotenv import load_dotenv
+from urllib.parse import unquote, urlparse, parse_qs
 
 load_dotenv()
 
+MAX_WEB_FETCHES = 2
 
-# ── Graph state ───────────────────────────────────────────────────────────────
+# Financial news domains to prioritize
+TRUSTED_DOMAINS = [
+    "cnbc.com", "reuters.com", "bloomberg.com",
+    "finance.yahoo.com", "marketwatch.com", "wsj.com",
+    "ft.com", "businessinsider.com", "seekingalpha.com",
+]
+
+
+# ── Agent State ───────────────────────────────────────────────────────────────
 class AgentState(TypedDict):
-    question:       str
-    query:          str          # may be rewritten across iterations
-    documents:      List[str]    # retrieved chunk texts
-    sources:        List[str]    # source URLs
-    answer:         str
-    retrieval_count: int         # tracks loop iterations
+    question:        str
+    query:           str
+    documents:       List[str]
+    sources:         List[str]
+    answer:          str
+    web_fetch_count: int
+    fetched_urls:    List[str]
+    candidate_urls:  List[str]
 
 
-# ── Node: Retrieve ────────────────────────────────────────────────────────────
-def retrieve(state: AgentState) -> AgentState:
-    """
-    Searches ChromaDB with the current query (original or rewritten).
-    Returns top-5 chunk texts and their source URLs.
-    """
+# ── Tool 1: Search ChromaDB ───────────────────────────────────────────────────
+def search_chromadb(state: AgentState) -> AgentState:
     from rag import vector_store
 
-    print(f"[AgenticRAG] Retrieve — query: '{state['query'][:60]}...'")
+    print(f"[AgenticRAG] Searching ChromaDB: '{state['query'][:60]}...'")
 
-    results = vector_store.similarity_search_with_score(state["query"], k=5)
+    results = vector_store.similarity_search_with_score(state["query"], k=10)
 
-    documents = [doc.page_content for doc, score in results if score < 0.95]
+    filtered = [(doc, score) for doc, score in results if score < 1.5]
+    if not filtered and results:
+        print(f"[AgenticRAG] Relaxing threshold — using top 3 chunks.")
+        filtered = results[:3]
+
+    documents = [doc.page_content for doc, score in filtered]
     sources   = list(set([
         doc.metadata.get("source", "Unknown")
-        for doc, score in results
-        if score < 0.95
+        for doc, score in filtered
     ]))
 
-    print(f"[AgenticRAG] Retrieved {len(documents)} chunks.")
-
-    return {
-        **state,
-        "documents":      documents,
-        "sources":        sources,
-        "retrieval_count": state.get("retrieval_count", 0) + 1,
-    }
+    print(f"[AgenticRAG] Found {len(documents)} chunks in ChromaDB.")
+    return {**state, "documents": documents, "sources": sources}
 
 
-# ── Node: Grade ───────────────────────────────────────────────────────────────
-def grade(state: AgentState) -> AgentState:
+# ── Web Search Helper (sync, runs in thread) ──────────────────────────────────
+def _duckduckgo_search(query: str, fetched_urls: list) -> list:
     """
-    LLM evaluates whether retrieved chunks contain enough information
-    to answer the question. Sets answer to 'INSUFFICIENT' as a signal
-    if context fails — the router checks this to decide next node.
+    Searches DuckDuckGo HTML for relevant financial URLs.
+    Runs synchronously — called via asyncio.to_thread in the node.
+    No API key required.
     """
+    try:
+        search_query = f"{query} earnings revenue financial results"
+
+        response = httpx.get(
+            "https://html.duckduckgo.com/html/",
+            params={"q": search_query},
+            headers={
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
+                "Accept-Language": "en-US,en;q=0.9",
+            },
+            timeout=15,
+            follow_redirects=True,
+        )
+
+        from bs4 import BeautifulSoup
+        soup = BeautifulSoup(response.text, "html.parser")
+
+        urls = []
+
+        # Extract from result links (DuckDuckGo encodes real URL in uddg param)
+        for a in soup.select(".result__a")[:10]:
+            href = a.get("href", "")
+            if "uddg=" in href:
+                parsed  = parse_qs(urlparse(href).query)
+                real_url = unquote(parsed.get("uddg", [""])[0])
+                if (real_url.startswith("http")
+                        and real_url not in fetched_urls
+                        and any(domain in real_url for domain in TRUSTED_DOMAINS)):
+                    urls.append(real_url)
+
+        # Also try direct result URLs
+        for result in soup.select(".result__url")[:10]:
+            href = result.get_text(strip=True)
+            if href and not href.startswith("http"):
+                href = "https://" + href
+            if (href.startswith("http")
+                    and href not in fetched_urls
+                    and href not in urls
+                    and any(domain in href for domain in TRUSTED_DOMAINS)):
+                urls.append(href)
+
+        print(f"[AgenticRAG] DuckDuckGo returned {len(urls)} trusted URLs.")
+        return urls[:3]
+
+    except Exception as e:
+        print(f"[AgenticRAG] DuckDuckGo search failed: {e}")
+        return []
+
+
+# ── Tool 2: Web Search for URLs ───────────────────────────────────────────────
+def web_search_urls(state: AgentState) -> AgentState:
+    """Finds relevant financial URLs via DuckDuckGo — no API key needed."""
+    import asyncio
+
+    print(f"[AgenticRAG] Searching web for: '{state['question'][:60]}'...")
+
+    fetched_urls = state.get("fetched_urls", [])
+
+    # Run sync HTTP call in thread to avoid blocking event loop
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as pool:
+                future = pool.submit(_duckduckgo_search, state["question"], fetched_urls)
+                urls = future.result(timeout=20)
+        else:
+            urls = asyncio.run(
+                asyncio.to_thread(_duckduckgo_search, state["question"], fetched_urls)
+            )
+    except Exception as e:
+        print(f"[AgenticRAG] Web search error: {e}")
+        urls = []
+
+    print(f"[AgenticRAG] Found {len(urls)} candidate URLs.")
+    return {**state, "candidate_urls": urls}
+
+
+# ── Tool 3: Fetch and Ingest Live URL ─────────────────────────────────────────
+def fetch_live_url(state: AgentState) -> AgentState:
+    """
+    Fetches a live URL, ingests it into ChromaDB, backs up to S3.
+    This is what makes the agent truly agentic — it autonomously
+    expands its knowledge base when existing data is insufficient.
+    """
+    candidate_urls = state.get("candidate_urls", [])
+    fetched_urls   = state.get("fetched_urls", [])
+
+    url_to_fetch = next(
+        (u for u in candidate_urls if u not in fetched_urls),
+        None
+    )
+
+    if not url_to_fetch:
+        print(f"[AgenticRAG] No new URLs to fetch — incrementing counter.")
+        return {
+            **state,
+            "web_fetch_count": state.get("web_fetch_count", 0) + 1,
+        }
+
+    print(f"[AgenticRAG] Fetching live URL: {url_to_fetch}")
+
+    try:
+        from rag import load_sources, split_documents, vector_store, upload_chroma_to_s3
+        from uuid import uuid4
+
+        docs = load_sources([url_to_fetch])
+
+        if not docs:
+            print(f"[AgenticRAG] Could not fetch content from {url_to_fetch}")
+            return {
+                **state,
+                "fetched_urls":    fetched_urls + [url_to_fetch],
+                "web_fetch_count": state.get("web_fetch_count", 0) + 1,
+            }
+
+        chunks = split_documents(docs)
+        ids    = [str(uuid4()) for _ in chunks]
+        vector_store.add_documents(chunks, ids=ids)
+        upload_chroma_to_s3()
+
+        print(f"[AgenticRAG] ✅ Ingested {len(chunks)} chunks from {url_to_fetch}")
+
+        return {
+            **state,
+            "fetched_urls":    fetched_urls + [url_to_fetch],
+            "web_fetch_count": state.get("web_fetch_count", 0) + 1,
+            "sources":         list(set(state.get("sources", []) + [url_to_fetch])),
+        }
+
+    except Exception as e:
+        print(f"[AgenticRAG] Fetch failed for {url_to_fetch}: {e}")
+        return {
+            **state,
+            "fetched_urls":    fetched_urls + [url_to_fetch],
+            "web_fetch_count": state.get("web_fetch_count", 0) + 1,
+        }
+
+
+# ── Node: Grade Context ───────────────────────────────────────────────────────
+def grade_context(state: AgentState) -> AgentState:
     from langchain_groq import ChatGroq
 
-    print(f"[AgenticRAG] Grading context (attempt {state['retrieval_count']})...")
+    print(f"[AgenticRAG] Grading context (web fetches: {state.get('web_fetch_count', 0)})...")
 
     if not state["documents"]:
-        print("[AgenticRAG] No documents retrieved — marking insufficient.")
+        print("[AgenticRAG] No documents — marking insufficient.")
         return {**state, "answer": "INSUFFICIENT"}
 
-    context = "\n\n".join(state["documents"][:3])  # use top 3 for grading
+    context = "\n\n".join(state["documents"][:5])
 
     llm = ChatGroq(
         model="llama-3.3-70b-versatile",
@@ -86,68 +235,37 @@ def grade(state: AgentState) -> AgentState:
     )
 
     response = llm.invoke(
-        f"Does the following context contain enough information to answer "
-        f"the question?\n\n"
+        f"Does the following context contain ANY relevant financial information "
+        f"that could help answer the question, even partially?\n\n"
         f"Question: {state['question']}\n\n"
-        f"Context: {context}\n\n"
+        f"Context: {context[:2000]}\n\n"
         f"Answer only YES or NO."
     )
 
     is_sufficient = "YES" in response.content.upper()
     print(f"[AgenticRAG] Grade: {'SUFFICIENT' if is_sufficient else 'INSUFFICIENT'}")
 
-    return {
-        **state,
-        "answer": "" if is_sufficient else "INSUFFICIENT",
-    }
+    return {**state, "answer": "" if is_sufficient else "INSUFFICIENT"}
 
 
-# ── Node: Rewrite ─────────────────────────────────────────────────────────────
-def rewrite(state: AgentState) -> AgentState:
-    """
-    LLM rewrites the query to be more specific when initial retrieval
-    didn't return sufficient context. Expands with financial terminology.
-    """
-    from langchain_groq import ChatGroq
-
-    print(f"[AgenticRAG] Rewriting query for better retrieval...")
-
-    llm = ChatGroq(
-        model="llama-3.3-70b-versatile",
-        temperature=0,
-        max_tokens=100,
-        api_key=os.getenv("GROQ_API_KEY"),
-    )
-
-    response = llm.invoke(
-        f"Rewrite this financial analysis question to be more specific "
-        f"and include relevant financial terms to improve document retrieval.\n\n"
-        f"Original question: {state['question']}\n\n"
-        f"Rewritten question (one sentence only):"
-    )
-
-    new_query = response.content.strip()
-    print(f"[AgenticRAG] Rewritten query: '{new_query[:80]}...'")
-
-    return {**state, "query": new_query}
-
-
-# ── Node: Generate ────────────────────────────────────────────────────────────
-def generate(state: AgentState) -> AgentState:
-    """
-    Generates the final answer using retrieved context.
-    Called only when grade() determines context is sufficient.
-    """
+# ── Node: Generate Answer ─────────────────────────────────────────────────────
+def generate_answer_node(state: AgentState) -> AgentState:
     from langchain_groq import ChatGroq
 
     print(f"[AgenticRAG] Generating answer...")
+
+    if not state["documents"]:
+        return {
+            **state,
+            "answer": "I don't have enough information to answer this question accurately."
+        }
 
     context = "\n\n".join(state["documents"])
 
     llm = ChatGroq(
         model="llama-3.3-70b-versatile",
         temperature=0.3,
-        max_tokens=500,
+        max_tokens=600,
         api_key=os.getenv("GROQ_API_KEY"),
     )
 
@@ -169,69 +287,55 @@ Question:
     )
 
     print(f"[AgenticRAG] Answer generated.")
-
     return {**state, "answer": response.content}
 
 
-# ── Router: after grade ───────────────────────────────────────────────────────
+# ── Router ────────────────────────────────────────────────────────────────────
 def route_after_grade(state: AgentState) -> str:
-    """
-    Decides next node after grading:
-    - If context sufficient → generate
-    - If insufficient and under retry limit → rewrite
-    - If insufficient and over retry limit → generate anyway (best effort)
-    """
     if state["answer"] != "INSUFFICIENT":
         return "generate"
 
-    if state.get("retrieval_count", 0) >= 3:
-        print("[AgenticRAG] Max retries reached — generating best-effort answer.")
+    if state.get("web_fetch_count", 0) >= MAX_WEB_FETCHES:
+        print(f"[AgenticRAG] Max web fetches ({MAX_WEB_FETCHES}) reached — generating best-effort answer.")
         return "generate"
 
-    return "rewrite"
+    return "web_search"
 
 
-# ── Build graph ───────────────────────────────────────────────────────────────
+# ── Build Graph ───────────────────────────────────────────────────────────────
 def build_graph():
-    """
-    Builds and compiles the LangGraph StateGraph.
-    Called once and reused for all queries.
-    """
     try:
         from langgraph.graph import StateGraph, END
     except ImportError:
-        raise ImportError(
-            "langgraph not installed. Run: pip install langgraph"
-        )
+        raise ImportError("langgraph not installed. Run: pip install langgraph")
 
     graph = StateGraph(AgentState)
 
-    # Add nodes
-    graph.add_node("retrieve", retrieve)
-    graph.add_node("grade",    grade)
-    graph.add_node("rewrite",  rewrite)
-    graph.add_node("generate", generate)
+    graph.add_node("search_chromadb", search_chromadb)
+    graph.add_node("grade_context",   grade_context)
+    graph.add_node("web_search_urls", web_search_urls)
+    graph.add_node("fetch_live_url",  fetch_live_url)
+    graph.add_node("generate_answer", generate_answer_node)
 
-    # Entry point
-    graph.set_entry_point("retrieve")
+    graph.set_entry_point("search_chromadb")
 
-    # Edges
-    graph.add_edge("retrieve", "grade")
+    graph.add_edge("search_chromadb", "grade_context")
     graph.add_conditional_edges(
-        "grade",
+        "grade_context",
         route_after_grade,
         {
-            "generate": "generate",
-            "rewrite":  "rewrite",
+            "generate":   "generate_answer",
+            "web_search": "web_search_urls",
         }
     )
-    graph.add_edge("rewrite",  "retrieve")   # loop back
-    graph.add_edge("generate", END)
+    graph.add_edge("web_search_urls", "fetch_live_url")
+    graph.add_edge("fetch_live_url",  "search_chromadb")
+    graph.add_edge("generate_answer", END)
 
     return graph.compile()
 
 
-# ── Singleton graph instance ──────────────────────────────────────────────────
+# ── Singleton ─────────────────────────────────────────────────────────────────
 _graph = None
 
 def get_graph():
@@ -243,33 +347,29 @@ def get_graph():
 
 # ── Public API ────────────────────────────────────────────────────────────────
 def agentic_query(question: str) -> tuple[str, list[str], int]:
-    """
-    Runs the agentic RAG pipeline for a given question.
-
-    Returns:
-        (answer: str, sources: list[str], retrieval_attempts: int)
-    """
     from rag import initialize_components
     initialize_components()
 
     graph = get_graph()
 
     initial_state: AgentState = {
-        "question":       question,
-        "query":          question,
-        "documents":      [],
-        "sources":        [],
-        "answer":         "",
-        "retrieval_count": 0,
+        "question":        question,
+        "query":           question,
+        "documents":       [],
+        "sources":         [],
+        "answer":          "",
+        "web_fetch_count": 0,
+        "fetched_urls":    [],
+        "candidate_urls":  [],
     }
 
     final_state = graph.invoke(initial_state)
 
-    answer   = final_state.get("answer", "I don't know")
-    sources  = final_state.get("sources", [])
-    attempts = final_state.get("retrieval_count", 1)
+    answer    = final_state.get("answer", "")
+    sources   = final_state.get("sources", [])
+    web_count = final_state.get("web_fetch_count", 0)
 
     if not answer or answer == "INSUFFICIENT":
-        answer = "I don't have enough information in the indexed sources to answer this question."
+        answer = "I don't have enough information to answer this question accurately."
 
-    return answer, sources, attempts
+    return answer, sources, web_count

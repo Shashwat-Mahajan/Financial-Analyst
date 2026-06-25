@@ -194,11 +194,18 @@ def initialize_components():
     global llm, vector_store
 
     with _init_lock:
-        # Double-checked locking — skip if already initialized
         if llm is not None and vector_store is not None:
             return
 
-        download_chroma_from_s3()
+        # Download from S3 only if vectorstore dir is empty
+        vectorstore_path = Path(VECTORSTORE_DIR)
+        is_empty = not vectorstore_path.exists() or not any(vectorstore_path.iterdir())
+
+        if is_empty:
+            print("[ChromaDB] Vectorstore empty — downloading from S3...")
+            download_chroma_from_s3()
+        else:
+            print("[ChromaDB] Using existing local vectorstore.")
 
         if llm is None:
             llm = ChatGroq(
@@ -372,7 +379,7 @@ def generate_answer(query):
         query = query + " comparison " + " vs ".join(companies)
 
     results = vector_store.similarity_search_with_score(query, k=30)
-    docs    = [doc for doc, score in results if score < 0.95]
+    docs = [doc for doc, score in results if score < 1.5]
 
     if not docs:
         return "I don't know", []

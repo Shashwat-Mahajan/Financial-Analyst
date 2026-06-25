@@ -13,7 +13,7 @@ export default function Login() {
     setLoading(true);
     setError("");
     try {
-      const res  = await fetch("http://13.126.196.65:8000/auth/login", {
+      const res  = await fetch("http://15.207.188.160:8000/auth/login", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
         body:    JSON.stringify({ email, password }),
