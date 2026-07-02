@@ -197,15 +197,23 @@ def initialize_components():
         if llm is not None and vector_store is not None:
             return
 
-        # Download from S3 only if vectorstore dir is empty
+        # ── Permanent fix: check for actual ChromaDB data file ──
+        # Docker creates the volume directory automatically (empty).
+        # Checking directory existence is not enough — must check
+        # for chroma.sqlite3 which only exists after real data is present.
         vectorstore_path = Path(VECTORSTORE_DIR)
-        is_empty = not vectorstore_path.exists() or not any(vectorstore_path.iterdir())
+        chroma_db_file = vectorstore_path / "chroma.sqlite3"
+        has_real_data = chroma_db_file.exists() and chroma_db_file.stat().st_size > 1024
 
-        if is_empty:
-            print("[ChromaDB] Vectorstore empty — downloading from S3...")
-            download_chroma_from_s3()
+        if not has_real_data:
+            print("[ChromaDB] No local data found — downloading from S3...")
+            downloaded = download_chroma_from_s3()
+            if not downloaded:
+                print("[ChromaDB] S3 empty — starting fresh.")
         else:
-            print("[ChromaDB] Using existing local vectorstore.")
+            print(
+                f"[ChromaDB] Local data found ({chroma_db_file.stat().st_size // 1024}KB) — using it."
+            )
 
         if llm is None:
             llm = ChatGroq(
